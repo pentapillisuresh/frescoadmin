@@ -1,10 +1,9 @@
-// src/pages/Products/RetailProducts.jsx
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Store, Search, Filter, Eye, XCircle, CheckCircle } from 'lucide-react';
-import GroceryProductForm from '../../pages/Products/GroceryProductForm';
+import { Plus, Edit, Trash2, Store, Search, Filter, XCircle, CheckCircle, Loader } from 'lucide-react';
+import GroceryProductForm from './GroceryProductForm';
 import productService from '../../services/productService';
 import categoryService from '../../services/categoryService';
-import { showSuccess, showError, showLoading, dismissToast } from '../../utils/toastUtils';
+import toast from 'react-hot-toast';
 
 const RetailProducts = ({ userRole }) => {
   const [products, setProducts] = useState([]);
@@ -16,7 +15,6 @@ const RetailProducts = ({ userRole }) => {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // Load data on component mount
   useEffect(() => {
     loadProducts();
     loadCategories();
@@ -26,10 +24,11 @@ const RetailProducts = ({ userRole }) => {
     setLoading(true);
     try {
       const retailProducts = await productService.getAllRetailProducts();
-      setProducts(retailProducts);
+      setProducts(Array.isArray(retailProducts) ? retailProducts : []);
     } catch (error) {
       console.error('Error loading products:', error);
-      showError('Failed to load products');
+      toast.error('Failed to load products');
+      setProducts([]);
     } finally {
       setLoading(false);
     }
@@ -53,47 +52,67 @@ const RetailProducts = ({ userRole }) => {
   };
 
   const handleEditProduct = (product) => {
+     console.log('Editing product:', product); // Debug log
+  console.log('Product ID:', product._id); // Debug log
     setEditingProduct(product);
     setShowGroceryForm(true);
   };
 
   const handleDeleteProduct = async (id) => {
-    if (window.confirm('Are you sure you want to delete this product?')) {
-      const loadingToast = showLoading('Deleting product...');
+    if (window.confirm('Are you sure you want to delete this product? This action cannot be undone.')) {
       try {
-        await productService.deleteProduct(id, 'retail');
-        await loadProducts();
-        showSuccess('Product deleted successfully!');
-        dismissToast(loadingToast);
+        await productService.deleteProduct(id);
+        
+        // Update UI immediately
+        setProducts(prev => prev.filter(p => p._id !== id));
+        
+        toast.success('Product deleted successfully');
       } catch (error) {
-        console.error('Error deleting product:', error);
-        showError('Failed to delete product');
-        dismissToast(loadingToast);
+        console.error('Delete error:', error);
+        const errorMessage = error.response?.data?.message || error.message || 'Delete failed';
+        toast.error(errorMessage);
       }
     }
   };
 
-  const handleSaveProduct = async (productData) => {
-    await loadProducts();
-    setShowGroceryForm(false);
-    setEditingProduct(null);
-  };
-
-  const handleToggleStatus = async (product) => {
-    const loadingToast = showLoading('Updating product status...');
+  const handleSaveProduct = (updatedProduct) => {
+     console.log('Saved/Updated product:', updatedProduct); // Debug log
+  console.log('Product ID:', updatedProduct._id); // Debug log
     try {
-      await productService.toggleProductStatus(product._id, !product.isActive);
-      await loadProducts();
-      showSuccess(`Product ${!product.isActive ? 'activated' : 'deactivated'} successfully`);
-      dismissToast(loadingToast);
+      // Update local state immediately
+      setProducts(prev => {
+        const exists = prev.some(p => p._id === updatedProduct._id);
+        
+        if (exists) {
+          return prev.map(p =>
+            p._id === updatedProduct._id ? updatedProduct : p
+          );
+        } else {
+          return [updatedProduct, ...prev];
+        }
+      });
+      
+      setShowGroceryForm(false);
+      setEditingProduct(null);
+      
+      toast.success(`Product ${updatedProduct._id ? 'updated' : 'added'} successfully`);
     } catch (error) {
-      console.error('Error toggling product status:', error);
-      showError('Failed to update product status');
-      dismissToast(loadingToast);
+      console.error('Error in handleSaveProduct:', error);
+      toast.error('Failed to save product');
     }
   };
 
-  // Filter products based on search and filters
+  const handleToggleStatus = async (product) => {
+    try {
+      await productService.toggleProductStatus(product._id, !product.isActive);
+      toast.success(`Product ${!product.isActive ? 'activated' : 'deactivated'} successfully`);
+      await loadProducts();
+    } catch (error) {
+      console.error('Error toggling product status:', error);
+      toast.error('Failed to update product status');
+    }
+  };
+
   const filteredProducts = products.filter(product => {
     const matchesSearch = product.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          product.description?.toLowerCase().includes(searchQuery.toLowerCase());
@@ -106,7 +125,6 @@ const RetailProducts = ({ userRole }) => {
     return matchesSearch && matchesCategory && matchesSubcategory;
   });
 
-  // Get unique categories for filters
   const uniqueCategories = ['all', ...new Set(products.map(p => {
     const cat = p.category;
     return typeof cat === 'object' ? cat?.name : cat;
@@ -120,7 +138,6 @@ const RetailProducts = ({ userRole }) => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Retail Products</h1>
@@ -135,7 +152,6 @@ const RetailProducts = ({ userRole }) => {
         </button>
       </div>
 
-      {/* Search and Filters */}
       <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border dark:border-gray-800 p-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="md:col-span-2">
@@ -188,7 +204,6 @@ const RetailProducts = ({ userRole }) => {
         </div>
       </div>
 
-      {/* Stats Card */}
       <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-xl p-6 border border-green-100 dark:border-green-800">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
@@ -209,10 +224,9 @@ const RetailProducts = ({ userRole }) => {
         </div>
       </div>
 
-      {/* Products Grid */}
       {loading ? (
         <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          <Loader className="animate-spin text-blue-600" size={48} />
         </div>
       ) : filteredProducts.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -229,6 +243,11 @@ const RetailProducts = ({ userRole }) => {
                           src={product.imageUrl} 
                           alt={product.name}
                           className="w-16 h-16 object-cover rounded-lg"
+                          onError={(e) => {
+                            e.target.onerror = null;
+                            e.target.src = '';
+                            e.target.parentElement.innerHTML = '<div class="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-lg flex items-center justify-center"><svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg></div>';
+                          }}
                         />
                       ) : (
                         <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-lg flex items-center justify-center">
@@ -272,7 +291,7 @@ const RetailProducts = ({ userRole }) => {
                     >
                       <Edit size={16} className="text-gray-600 dark:text-gray-400" />
                     </button>
-                    {userRole === 'super_admin' && (
+                    {['super_admin', 'admin','SUPER_ADMIN', 'ADMIN'].includes(userRole) && (
                       <button
                         onClick={() => handleDeleteProduct(product._id)}
                         className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
@@ -343,7 +362,6 @@ const RetailProducts = ({ userRole }) => {
         </div>
       )}
 
-      {/* Product Form Modal */}
       {showGroceryForm && (
         <GroceryProductForm
           product={editingProduct}

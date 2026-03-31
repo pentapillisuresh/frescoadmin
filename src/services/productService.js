@@ -1,22 +1,19 @@
-// src/services/productService.js
 import axiosInstance from '../utils/axiosInterceptor';
 import { API_ENDPOINTS } from '../config/api';
 import API_BASE_URL from '../config/api';
 
 const productService = {
-  // Get all products (retail) - Using /v1/products endpoint with retail filter
+  // Get all products (retail)
   getAllRetailProducts: async () => {
     try {
-      // Use the base products endpoint with isWholesale=false filter
-      const response = await axiosInstance.get(`${API_ENDPOINTS.PRODUCTS.BASE}`, {
+      const response = await axiosInstance.get(API_ENDPOINTS.PRODUCTS.BASE, {
         params: { isWholesale: false }
       });
-      // Transform image URLs to full URLs
-      const products = response.data.products?.map(product => ({
+      const products = response.data?.products || response.data || [];
+      return products.map(product => ({
         ...product,
-        imageUrl: product.image ? `${API_BASE_URL}/${product.image}` : null
-      })) || [];
-      return products;
+        imageUrl: product.image ? `${API_BASE_URL}${product.image.startsWith('/') ? product.image : '/' + product.image}` : null
+      }));
     } catch (error) {
       console.error('Error fetching retail products:', error);
       throw error;
@@ -26,14 +23,14 @@ const productService = {
   // Get all wholesale products
   getAllWholesaleProducts: async () => {
     try {
-      const response = await axiosInstance.get(`${API_ENDPOINTS.PRODUCTS.BASE}`, {
+      const response = await axiosInstance.get(API_ENDPOINTS.PRODUCTS.BASE, {
         params: { isWholesale: true }
       });
-      const products = response.data.products?.map(product => ({
+      const products = response.data?.products || response.data || [];
+      return products.map(product => ({
         ...product,
-        imageUrl: product.image ? `${API_BASE_URL}/${product.image}` : null
-      })) || [];
-      return products;
+        imageUrl: product.image ? `${API_BASE_URL}${product.image.startsWith('/') ? product.image : '/' + product.image}` : null
+      }));
     } catch (error) {
       console.error('Error fetching wholesale products:', error);
       throw error;
@@ -43,7 +40,6 @@ const productService = {
   // Create new product
   createProduct: async (formData, productType = 'retail') => {
     try {
-      // Add isWholesale flag based on product type
       formData.append('isWholesale', productType === 'wholesale');
       
       const response = await axiosInstance.post(
@@ -59,7 +55,7 @@ const productService = {
       const product = response.data;
       return {
         ...product,
-        imageUrl: product.image ? `${API_BASE_URL}/${product.image}` : null
+        imageUrl: product.image ? `${API_BASE_URL}${product.image.startsWith('/') ? product.image : '/' + product.image}` : null
       };
     } catch (error) {
       console.error('Error creating product:', error);
@@ -70,8 +66,11 @@ const productService = {
   // Update product
   updateProduct: async (productId, formData, productType = 'retail') => {
     try {
+      const url = `${API_ENDPOINTS.PRODUCTS.BASE}/${productId}`;
+      console.log('Updating product at URL:', url);
+      
       const response = await axiosInstance.put(
-        `${API_ENDPOINTS.PRODUCTS.BASE}/${productId}`,
+        url,
         formData,
         {
           headers: {
@@ -79,25 +78,30 @@ const productService = {
           },
         }
       );
-      
+       console.log('Update response:', response.data);
       const product = response.data;
       return {
         ...product,
-        imageUrl: product.image ? `${API_BASE_URL}/${product.image}` : null
+        imageUrl: product.image ? `${API_BASE_URL}${product.image.startsWith('/') ? product.image : '/' + product.image}` : null
       };
     } catch (error) {
       console.error('Error updating product:', error);
+      console.error('Error response:', error.response?.data);
       throw error;
     }
   },
 
   // Delete product
-  deleteProduct: async (productId, productType = 'retail') => {
+  deleteProduct: async (productId) => {
     try {
-      const response = await axiosInstance.delete(`${API_ENDPOINTS.PRODUCTS.BASE}/${productId}`);
+      const url = `${API_ENDPOINTS.PRODUCTS.BASE}/${productId}`;
+      console.log('Deleting product at URL:', url);
+      
+      const response = await axiosInstance.delete(url);
       return response.data;
     } catch (error) {
       console.error('Error deleting product:', error);
+      console.error('Error response:', error.response?.data);
       throw error;
     }
   },
@@ -109,7 +113,7 @@ const productService = {
       const product = response.data;
       return {
         ...product,
-        imageUrl: product.image ? `${API_BASE_URL}/${product.image}` : null
+        imageUrl: product.image ? `${API_BASE_URL}${product.image.startsWith('/') ? product.image : '/' + product.image}` : null
       };
     } catch (error) {
       console.error('Error fetching product:', error);

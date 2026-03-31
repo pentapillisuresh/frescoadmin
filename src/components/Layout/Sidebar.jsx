@@ -3,13 +3,14 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { 
   Home, Package, Users, ShoppingCart, MapPin, Settings, 
   ChevronDown, ChevronRight, ShoppingBag, Store, Coffee,
-  LogOut, Menu as MenuIcon, X, Search, User
+  LogOut, Menu as MenuIcon, X, Search, User, Building2, Globe, List
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
 const Sidebar = ({ isOpen, toggleSidebar }) => {
   const [productsOpen, setProductsOpen] = useState(false);
   const [ordersOpen, setOrdersOpen] = useState(false);
+  const [koveraOpen, setKoveraOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -19,6 +20,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
     if (!isOpen) {
       setProductsOpen(false);
       setOrdersOpen(false);
+      setKoveraOpen(false);
     }
   }, [isOpen]);
 
@@ -86,17 +88,36 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
         ] : [])
       ]
     },
+    // KOVERA dropdown menu with Locations and Menu Items
+    ...(userRole === 'super_admin' ? [
+      { 
+        type: 'dropdown',
+        label: 'KOVERA',
+        icon: <Building2 size={20} />,
+        isOpen: koveraOpen,
+        toggle: () => setKoveraOpen(!koveraOpen),
+        roles: ['super_admin'],
+        subItems: [
+          { 
+            path: '/locations', 
+            label: 'Locations', 
+            icon: <MapPin size={16} />,
+            roles: ['super_admin']
+          },
+          { 
+            path: '/kovera/menu-items', 
+            label: 'Menu Items', 
+            icon: <List size={16} />,
+            roles: ['super_admin']
+          }
+        ]
+      }
+    ] : []),
     ...(userRole === 'super_admin' ? [
       { 
         path: '/staff-management', 
         icon: <Users size={20} />, 
         label: 'Staff Management',
-        roles: ['super_admin']
-      },
-      { 
-        path: '/locations', 
-        icon: <MapPin size={20} />, 
-        label: 'KOVERA Locations',
         roles: ['super_admin']
       }
     ] : []),
@@ -197,7 +218,6 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
               <X size={20} />
             </button>
           </div>
-
         </div>
 
         {/* Navigation Menu */}
@@ -293,8 +313,6 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
             </div>
           ))}
         </nav>
-
-      
       </div>
     </>
   );

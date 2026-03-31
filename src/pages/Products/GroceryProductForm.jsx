@@ -1,6 +1,5 @@
-// src/components/Products/GroceryProductForm.jsx
 import React, { useState, useEffect } from 'react';
-import { X, Upload, Image as ImageIcon } from 'lucide-react';
+import { X, Upload, Image as ImageIcon, Loader } from 'lucide-react';
 import categoryService from '../../services/categoryService';
 import productService from '../../services/productService';
 import API_BASE_URL from '../../config/api';
@@ -28,31 +27,12 @@ const GroceryProductForm = ({ product, onSave, onClose, productType = 'retail' }
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
 
-  // Load categories on component mount
   useEffect(() => {
     loadCategories();
   }, []);
 
-  const loadCategories = async () => {
-    setLoading(true);
-    try {
-      const allCategories = await categoryService.getAllCategories();
-      // Filter for grocery categories
-      const groceryCategories = allCategories.filter(cat => 
-        cat.categoryType === 'groceries' || cat.categoryType === 'grocery'
-      );
-      setCategories(groceryCategories);
-    } catch (error) {
-      console.error('Error loading categories:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Update form data when editing existing product
   useEffect(() => {
     if (product) {
-      // Handle category object or string
       const categoryId = typeof product.category === 'object' 
         ? product.category._id 
         : product.category;
@@ -78,7 +58,6 @@ const GroceryProductForm = ({ product, onSave, onClose, productType = 'retail' }
         isActive: product.isActive !== false
       });
 
-      // Load subcategories for this category
       if (categoryId) {
         const selectedCat = categories.find(c => c._id === categoryId);
         if (selectedCat) {
@@ -88,7 +67,6 @@ const GroceryProductForm = ({ product, onSave, onClose, productType = 'retail' }
     }
   }, [product, categories]);
 
-  // Update subcategories when category changes
   useEffect(() => {
     if (formData.categoryId) {
       const selectedCategory = categories.find(cat => cat._id === formData.categoryId);
@@ -99,6 +77,21 @@ const GroceryProductForm = ({ product, onSave, onClose, productType = 'retail' }
       setAvailableSubcategories([]);
     }
   }, [formData.categoryId, categories]);
+
+  const loadCategories = async () => {
+    setLoading(true);
+    try {
+      const allCategories = await categoryService.getAllCategories();
+      const groceryCategories = allCategories.filter(cat => 
+        cat.categoryType === 'groceries' || cat.categoryType === 'grocery'
+      );
+      setCategories(groceryCategories);
+    } catch (error) {
+      console.error('Error loading categories:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -115,20 +108,18 @@ const GroceryProductForm = ({ product, onSave, onClose, productType = 'retail' }
       ...prev,
       categoryId: categoryId,
       category: selectedCategory?.name || '',
-      subCategory: '' // Reset subcategory when category changes
+      subCategory: ''
     }));
   };
 
   const handleImageChange = (e) => {
     const file = e.target.files[0];
     if (file) {
-      // Validate file type
       if (!file.type.startsWith('image/')) {
         alert('Please select an image file');
         return;
       }
       
-      // Validate file size (max 5MB)
       if (file.size > 5 * 1024 * 1024) {
         alert('Image size should be less than 5MB');
         return;
@@ -145,7 +136,6 @@ const GroceryProductForm = ({ product, onSave, onClose, productType = 'retail' }
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Validate required fields
     if (!formData.name.trim()) {
       alert('Please enter product name');
       return;
@@ -189,10 +179,12 @@ const GroceryProductForm = ({ product, onSave, onClose, productType = 'retail' }
     setUploading(true);
     
     try {
-      // Prepare FormData for API
       const submitData = new FormData();
       submitData.append('name', formData.name);
-      submitData.append('category', formData.categoryId); // Send category ID, not name
+      // Send category as categoryId to match backend expectations
+      submitData.append('categoryId', formData.categoryId);
+      // Also send category for backward compatibility
+      submitData.append('category', formData.categoryId);
       
       if (formData.subCategory) {
         submitData.append('subCategory', formData.subCategory);
@@ -220,19 +212,16 @@ const GroceryProductForm = ({ product, onSave, onClose, productType = 'retail' }
         submitData.append('image', formData.image);
       }
 
-      // Add isActive flag
       submitData.append('isActive', formData.isActive);
 
       let savedProduct;
       if (product && product._id) {
-        // Update existing product
+        console.log('Updating product with ID:', product._id);
         savedProduct = await productService.updateProduct(product._id, submitData, productType);
       } else {
-        // Create new product
         savedProduct = await productService.createProduct(submitData, productType);
       }
       
-      // Clear image preview URL
       if (formData.imagePreview && formData.image) {
         URL.revokeObjectURL(formData.imagePreview);
       }
@@ -241,7 +230,13 @@ const GroceryProductForm = ({ product, onSave, onClose, productType = 'retail' }
     } catch (error) {
       console.error('Error saving product:', error);
       const errorMessage = error.response?.data?.message || error.message || 'Failed to save product. Please try again.';
-      if (Array.isArray(errorMessage)) {
+      
+      // Show more detailed error
+      if (error.response?.data?.errors) {
+        const errors = error.response.data.errors;
+        const errorMessages = Object.values(errors).flat();
+        alert(errorMessages.join('\n'));
+      } else if (Array.isArray(errorMessage)) {
         alert(errorMessage.join('\n'));
       } else {
         alert(errorMessage);
@@ -294,6 +289,7 @@ const GroceryProductForm = ({ product, onSave, onClose, productType = 'retail' }
                     required
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
                     placeholder="e.g., Fresh Apples, Organic Rice, etc."
+                    disabled={uploading}
                   />
                 </div>
 
@@ -306,7 +302,7 @@ const GroceryProductForm = ({ product, onSave, onClose, productType = 'retail' }
                     value={formData.categoryId}
                     onChange={handleCategoryChange}
                     required
-                    disabled={loading}
+                    disabled={loading || uploading}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors disabled:bg-gray-50"
                   >
                     <option value="">Select Category</option>
@@ -326,7 +322,7 @@ const GroceryProductForm = ({ product, onSave, onClose, productType = 'retail' }
                     name="subCategory"
                     value={formData.subCategory}
                     onChange={handleChange}
-                    disabled={availableSubcategories.length === 0}
+                    disabled={availableSubcategories.length === 0 || uploading}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors disabled:bg-gray-50 disabled:cursor-not-allowed"
                   >
                     <option value="">Select Subcategory</option>
@@ -347,6 +343,7 @@ const GroceryProductForm = ({ product, onSave, onClose, productType = 'retail' }
                     rows="3"
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors resize-none"
                     placeholder="Product description..."
+                    disabled={uploading}
                   />
                 </div>
               </div>
@@ -371,6 +368,7 @@ const GroceryProductForm = ({ product, onSave, onClose, productType = 'retail' }
                         step="0.01"
                         className="w-full pl-8 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
                         placeholder="0.00"
+                        disabled={uploading}
                       />
                     </div>
                   </div>
@@ -391,6 +389,7 @@ const GroceryProductForm = ({ product, onSave, onClose, productType = 'retail' }
                         step="0.01"
                         className="w-full pl-8 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
                         placeholder="0.00"
+                        disabled={uploading}
                       />
                     </div>
                   </div>
@@ -408,6 +407,7 @@ const GroceryProductForm = ({ product, onSave, onClose, productType = 'retail' }
                       min="1"
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
                       placeholder="Minimum order quantity"
+                      disabled={uploading}
                     />
                   </div>
                 </div>
@@ -427,6 +427,7 @@ const GroceryProductForm = ({ product, onSave, onClose, productType = 'retail' }
                     min="0"
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
                     placeholder="0"
+                    disabled={uploading}
                   />
                 </div>
 
@@ -440,6 +441,7 @@ const GroceryProductForm = ({ product, onSave, onClose, productType = 'retail' }
                     onChange={handleChange}
                     required
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
+                    disabled={uploading}
                   >
                     {unitOptions.map(unit => (
                       <option key={unit} value={unit}>
@@ -462,6 +464,7 @@ const GroceryProductForm = ({ product, onSave, onClose, productType = 'retail' }
                     step="0.01"
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
                     placeholder="e.g., 1.5"
+                    disabled={uploading}
                   />
                 </div>
               </div>
@@ -487,6 +490,7 @@ const GroceryProductForm = ({ product, onSave, onClose, productType = 'retail' }
                         setFormData(prev => ({ ...prev, image: null, imagePreview: null }));
                       }}
                       className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full hover:bg-red-600"
+                      disabled={uploading}
                     >
                       <X size={16} />
                     </button>
@@ -499,7 +503,7 @@ const GroceryProductForm = ({ product, onSave, onClose, productType = 'retail' }
                   </div>
                 )}
                 
-                <label className="cursor-pointer inline-flex items-center space-x-2 bg-blue-50 text-blue-600 px-4 py-2 rounded-lg hover:bg-blue-100 transition-colors">
+                <label className={`cursor-pointer inline-flex items-center space-x-2 bg-blue-50 text-blue-600 px-4 py-2 rounded-lg hover:bg-blue-100 transition-colors ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}>
                   <Upload size={16} />
                   <span>Upload Image</span>
                   <input
@@ -507,6 +511,7 @@ const GroceryProductForm = ({ product, onSave, onClose, productType = 'retail' }
                     accept="image/*"
                     onChange={handleImageChange}
                     className="hidden"
+                    disabled={uploading}
                   />
                 </label>
                 <p className="text-xs text-gray-500 mt-2">Max size: 5MB. JPG, PNG, GIF</p>
@@ -525,6 +530,7 @@ const GroceryProductForm = ({ product, onSave, onClose, productType = 'retail' }
                       checked={formData.isActive}
                       onChange={handleChange}
                       className="sr-only peer"
+                      disabled={uploading}
                     />
                     <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                   </label>
@@ -540,22 +546,17 @@ const GroceryProductForm = ({ product, onSave, onClose, productType = 'retail' }
                 type="button"
                 onClick={onClose}
                 className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                disabled={uploading}
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={uploading}
-                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
-                {uploading ? (
-                  <span className="flex items-center space-x-2">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    <span>Saving...</span>
-                  </span>
-                ) : (
-                  product ? 'Update Product' : 'Add Product'
-                )}
+                {uploading && <Loader className="animate-spin" size={20} />}
+                {uploading ? 'Saving...' : (product ? 'Update Product' : 'Add Product')}
               </button>
             </div>
           </div>

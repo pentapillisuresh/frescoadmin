@@ -1,6 +1,5 @@
-// src/components/Shared/ConfirmDialog.jsx
 import React from 'react';
-import { AlertTriangle, CheckCircle, XCircle, Info } from 'lucide-react';
+import { AlertTriangle, CheckCircle, XCircle, Info, Loader } from 'lucide-react';
 
 const ConfirmDialog = ({
   isOpen,
@@ -43,8 +42,8 @@ const ConfirmDialog = ({
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center">
-        <div className="fixed inset-0 transition-opacity" onClick={onClose}>
+      <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+        <div className="fixed inset-0 transition-opacity" onClick={!loading ? onClose : undefined}>
           <div className="absolute inset-0 bg-black opacity-50"></div>
         </div>
 
@@ -73,8 +72,9 @@ const ConfirmDialog = ({
               <button
                 onClick={onConfirm}
                 disabled={loading}
-                className={`px-6 py-3 text-white rounded-xl font-medium transition-colors ${getButtonColor()} disabled:opacity-50`}
+                className={`px-6 py-3 text-white rounded-xl font-medium transition-colors ${getButtonColor()} disabled:opacity-50 flex items-center gap-2`}
               >
+                {loading && <Loader className="animate-spin" size={20} />}
                 {loading ? 'Processing...' : confirmText}
               </button>
             </div>

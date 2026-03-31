@@ -1,4 +1,3 @@
-// src/App.jsx
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
@@ -18,6 +17,7 @@ import WholesaleOrders from './pages/Orders/WholesaleOrders';
 import Locations from './pages/Locations';
 import Settings from './pages/Settings';
 import MainLayout from './components/Layout/MainLayout';
+import MenuItems from './pages/kovera/MenuItems';
 
 function App() {
   return (
@@ -70,6 +70,10 @@ function App() {
             <Route path="orders/retail" element={<ProtectedRoute><RetailOrders /></ProtectedRoute>} />
             <Route path="orders/wholesale" element={<ProtectedRoute allowedRoles={['super_admin']}><WholesaleOrders /></ProtectedRoute>} />
             <Route path="locations" element={<ProtectedRoute allowedRoles={['super_admin']}><Locations /></ProtectedRoute>} />
+            
+            {/* Add the new route for Menu Items */}
+            <Route path="kovera/menu-items" element={<ProtectedRoute allowedRoles={['super_admin']}><MenuItems /></ProtectedRoute>} />
+            
             <Route path="settings" element={<ProtectedRoute allowedRoles={['super_admin']}><Settings /></ProtectedRoute>} />
             <Route path="*" element={<Navigate to="dashboard" replace />} />
           </Route>
