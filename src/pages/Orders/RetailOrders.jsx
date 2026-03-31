@@ -1,118 +1,196 @@
 // src/pages/Orders/RetailOrders.jsx
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { Search, Filter, Download, Eye, Truck, CheckCircle } from 'lucide-react';
+import { Search, Filter, Download, Eye, Truck, CheckCircle, Loader } from 'lucide-react';
 import OrderList from '../../components/Orders/OrderList';
 import OrderDetails from '../../components/Orders/OrderDetails';
+import orderService from '../../services/orderService';
+import { showSuccess, showError, showLoading, dismissToast } from '../../utils/toastUtils';
 
 const RetailOrders = () => {
   const { user } = useAuth();
   const [orders, setOrders] = useState([]);
-  const [filteredOrders, setFilteredOrders] = useState([]);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showOrderDetails, setShowOrderDetails] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  
+  // Filter states
+  const [filters, setFilters] = useState({
+    status: '',
+    paymentStatus: '',
+    startDate: '',
+    endDate: '',
+    page: 1,
+    limit: 10
+  });
+  
+  // Pagination states
+  const [pagination, setPagination] = useState({
+    total: 0,
+    page: 1,
+    limit: 10,
+    totalPages: 0
+  });
+  
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [dateFilter, setDateFilter] = useState('all');
 
-  // Initialize orders data
-  useEffect(() => {
-    const storedOrders = JSON.parse(localStorage.getItem('orders') || '[]');
-    const retailOrders = storedOrders.filter(order => order.type === 'retail');
-    setOrders(retailOrders);
-    setFilteredOrders(retailOrders);
-  }, []);
-
-  // Apply filters
-  useEffect(() => {
-    let filtered = orders;
-
-    // Search filter
-    if (searchQuery) {
-      filtered = filtered.filter(order =>
-        order.orderNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        order.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        order.customerEmail?.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-
-    // Status filter
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(order => order.status.toLowerCase() === statusFilter.toLowerCase());
-    }
-
-    // Date filter
-    if (dateFilter !== 'all') {
-      const today = new Date();
-      const orderDate = new Date(filtered.date);
+  // Fetch orders from API
+  const fetchOrders = async () => {
+    try {
+      setLoading(true);
+      const response = await orderService.getRetailOrders(filters);
       
-      switch (dateFilter) {
-        case 'today':
-          filtered = filtered.filter(order => 
-            new Date(order.date).toDateString() === today.toDateString()
-          );
-          break;
-        case 'week':
-          const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-          filtered = filtered.filter(order => new Date(order.date) >= weekAgo);
-          break;
-        case 'month':
-          const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
-          filtered = filtered.filter(order => new Date(order.date) >= monthAgo);
-          break;
-      }
+      // Transform orders to match component structure
+      const transformedOrders = response.orders.map(order => ({
+        id: order._id,
+        orderNumber: order.orderNumber,
+        customerName: order.user?.firstName && order.user?.lastName 
+          ? `${order.user.firstName} ${order.user.lastName}`.trim()
+          : order.user?.phone || 'Guest',
+        customerEmail: order.user?.email || '',
+        date: order.createdAt,
+        total: `₱ ${order.total.toLocaleString()}`,
+        status: order.status,
+        paymentStatus: order.paymentStatus,
+        items: order.items,
+        subtotal: order.subtotal,
+        discount: order.discount,
+        tax: order.tax,
+        deliveryCharge: order.deliveryCharge,
+        shippingAddress: order.shippingAddress,
+        billingAddress: order.billingAddress
+      }));
+      
+      setOrders(transformedOrders);
+      setPagination({
+        total: response.total,
+        page: response.page,
+        limit: response.limit,
+        totalPages: response.totalPages
+      });
+    } catch (error) {
+      console.error('Error fetching retail orders:', error);
+      showError(error.response?.data?.message || 'Failed to fetch orders');
+      setOrders([]);
+    } finally {
+      setLoading(false);
     }
+  };
 
-    setFilteredOrders(filtered);
-  }, [orders, searchQuery, statusFilter, dateFilter]);
+  // Apply filters effect
+  useEffect(() => {
+    fetchOrders();
+  }, [filters]);
+
+  // Handle search
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(() => {
+      if (searchQuery) {
+        // Search by order number or customer name/phone
+        setOrders(prevOrders => 
+          prevOrders.filter(order => 
+            order.orderNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            order.customerName.toLowerCase().includes(searchQuery.toLowerCase())
+          )
+        );
+      } else {
+        fetchOrders();
+      }
+    }, 500);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchQuery]);
 
   const handleViewOrder = (order) => {
     setSelectedOrder(order);
     setShowOrderDetails(true);
   };
 
-  const handleUpdateStatus = (orderId, newStatus) => {
-    const updatedOrders = orders.map(order => 
-      order.id === orderId ? { ...order, status: newStatus } : order
-    );
-    setOrders(updatedOrders);
+  const handleUpdateStatus = async (orderId, newStatus) => {
+    const loadingToast = showLoading('Updating order status...');
     
-    // Update localStorage
-    const allOrders = JSON.parse(localStorage.getItem('orders') || '[]');
-    const updatedAllOrders = allOrders.map(order => 
-      order.id === orderId ? { ...order, status: newStatus } : order
-    );
-    localStorage.setItem('orders', JSON.stringify(updatedAllOrders));
+    try {
+      await orderService.updateOrderStatus(orderId, newStatus);
+      
+      // Update local state
+      setOrders(orders.map(order => 
+        order.id === orderId ? { ...order, status: newStatus } : order
+      ));
+      
+      showSuccess('Order status updated successfully');
+      dismissToast(loadingToast);
+      
+      // Refresh orders
+      fetchOrders();
+    } catch (error) {
+      console.error('Error updating order status:', error);
+      showError(error.response?.data?.message || 'Failed to update order status');
+      dismissToast(loadingToast);
+    }
   };
 
-  const handleExport = () => {
-    // Export orders as CSV
-    const csv = [
-      ['Order ID', 'Customer', 'Date', 'Amount', 'Status', 'Payment'],
-      ...filteredOrders.map(order => [
-        order.orderNumber,
-        order.customerName,
-        new Date(order.date).toLocaleDateString(),
-        order.total,
-        order.status,
-        order.paymentStatus || 'Paid'
-      ])
-    ].map(row => row.join(',')).join('\n');
+  const handleExport = async () => {
+    try {
+      setExporting(true);
+      const exportFilters = {
+        status: filters.status !== 'all' ? filters.status : undefined,
+        paymentStatus: filters.paymentStatus !== 'all' ? filters.paymentStatus : undefined,
+        isWholesale: false,
+        startDate: filters.startDate,
+        endDate: filters.endDate
+      };
+      
+      const blob = await orderService.exportOrders(exportFilters);
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `retail-orders-${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+      showSuccess('Orders exported successfully');
+    } catch (error) {
+      console.error('Error exporting orders:', error);
+      showError('Failed to export orders');
+    } finally {
+      setExporting(false);
+    }
+  };
 
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `retail-orders-${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
+  const handleFilterChange = (key, value) => {
+    setFilters(prev => ({
+      ...prev,
+      [key]: value,
+      page: 1 // Reset to first page when filter changes
+    }));
+  };
+
+  const handlePageChange = (newPage) => {
+    setFilters(prev => ({
+      ...prev,
+      page: newPage
+    }));
   };
 
   const stats = {
-    total: filteredOrders.length,
-    completed: filteredOrders.filter(o => o.status === 'completed').length,
-    processing: filteredOrders.filter(o => o.status === 'processing').length,
-    pending: filteredOrders.filter(o => o.status === 'pending').length,
+    total: pagination.total,
+    completed: orders.filter(o => o.status === 'delivered').length,
+    processing: orders.filter(o => o.status === 'processing').length,
+    pending: orders.filter(o => o.status === 'pending').length,
   };
+
+  if (loading && orders.length === 0) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader className="animate-spin text-blue-600" size={48} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -123,10 +201,15 @@ const RetailOrders = () => {
         </div>
         <button
           onClick={handleExport}
-          className="bg-gradient-to-r from-green-600 to-emerald-600 text-white px-4 py-2.5 rounded-xl flex items-center space-x-2 hover:from-green-700 hover:to-emerald-700 transition-all duration-200"
+          disabled={exporting}
+          className="bg-gradient-to-r from-green-600 to-emerald-600 text-white px-4 py-2.5 rounded-xl flex items-center space-x-2 hover:from-green-700 hover:to-emerald-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <Download size={20} />
-          <span>Export Orders</span>
+          {exporting ? (
+            <Loader className="animate-spin" size={20} />
+          ) : (
+            <Download size={20} />
+          )}
+          <span>{exporting ? 'Exporting...' : 'Export Orders'}</span>
         </button>
       </div>
 
@@ -145,7 +228,7 @@ const RetailOrders = () => {
         <div className="bg-gradient-to-r from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 p-6 rounded-xl">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Completed</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Delivered</p>
               <p className="text-3xl font-bold text-gray-900 dark:text-gray-100 mt-2">{stats.completed}</p>
             </div>
             <CheckCircle className="text-green-600 dark:text-green-400" size={32} />
@@ -175,7 +258,7 @@ const RetailOrders = () => {
 
       {/* Filters */}
       <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border dark:border-gray-800 p-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Search</label>
             <div className="relative">
@@ -186,49 +269,79 @@ const RetailOrders = () => {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search orders..."
+                placeholder="Search by order # or customer..."
                 className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Status</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Order Status</label>
             <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
+              value={filters.status}
+              onChange={(e) => handleFilterChange('status', e.target.value)}
               className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
-              <option value="all">All Status</option>
+              <option value="">All Status</option>
               <option value="pending">Pending</option>
+              <option value="confirmed">Confirmed</option>
               <option value="processing">Processing</option>
-              <option value="completed">Completed</option>
+              <option value="shipped">Shipped</option>
+              <option value="out_for_delivery">Out for Delivery</option>
+              <option value="delivered">Delivered</option>
               <option value="cancelled">Cancelled</option>
+              <option value="refunded">Refunded</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Payment Status</label>
+            <select
+              value={filters.paymentStatus}
+              onChange={(e) => handleFilterChange('paymentStatus', e.target.value)}
+              className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="">All Payments</option>
+              <option value="pending">Pending</option>
+              <option value="paid">Paid</option>
+              <option value="failed">Failed</option>
+              <option value="refunded">Refunded</option>
+              <option value="partially_refunded">Partially Refunded</option>
             </select>
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Date Range</label>
-            <select
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="all">All Time</option>
-              <option value="today">Today</option>
-              <option value="week">Last 7 Days</option>
-              <option value="month">Last 30 Days</option>
-            </select>
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                type="date"
+                value={filters.startDate}
+                onChange={(e) => handleFilterChange('startDate', e.target.value)}
+                className="px-3 py-2.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
+                placeholder="Start Date"
+              />
+              <input
+                type="date"
+                value={filters.endDate}
+                onChange={(e) => handleFilterChange('endDate', e.target.value)}
+                className="px-3 py-2.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
+                placeholder="End Date"
+              />
+            </div>
           </div>
         </div>
       </div>
 
       {/* Orders Table */}
       <OrderList
-        orders={filteredOrders}
+        orders={orders}
         onView={handleViewOrder}
+        onUpdateStatus={handleUpdateStatus}
         type="retail"
         userRole={user?.role}
+        loading={loading}
+        pagination={pagination}
+        onPageChange={handlePageChange}
       />
 
       {/* Order Details Modal */}
@@ -256,6 +369,7 @@ const RetailOrders = () => {
                 <OrderDetails 
                   order={selectedOrder} 
                   onClose={() => setShowOrderDetails(false)}
+                  onUpdateStatus={handleUpdateStatus}
                   userRole={user?.role}
                 />
               </div>

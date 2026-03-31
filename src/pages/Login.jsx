@@ -1,34 +1,19 @@
+// src/pages/Login.jsx
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Lock, Mail, Eye, EyeOff, Store } from 'lucide-react';
 
 const Login = () => {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loginType, setLoginType] = useState('admin'); // 'admin' or 'staff'
   
   const { login } = useAuth();
   const navigate = useNavigate();
-
-  // Initialize default admin if no staff exists
-  React.useEffect(() => {
-    const staff = JSON.parse(localStorage.getItem('staff') || '[]');
-    if (staff.length === 0) {
-      const defaultAdmin = {
-        id: 1,
-        username: 'admin',
-        email: 'admin@kovera.com',
-        password: 'admin123',
-        role: 'super_admin',
-        location: 'All',
-        isActive: true
-      };
-      localStorage.setItem('staff', JSON.stringify([defaultAdmin]));
-    }
-  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -36,12 +21,16 @@ const Login = () => {
     setLoading(true);
 
     try {
-      const userData = await login(username, password);
+      // Determine if this is admin login or staff login
+      const isAdminLogin = loginType === 'admin';
+      const userData = await login(email, password, isAdminLogin);
       
+      // Redirect based on role
       if (userData.role === 'super_admin') {
         navigate('/dashboard');
       } else if (userData.role === 'staff') {
-        // Staff can only access certain pages
+        navigate('/dashboard');
+      } else {
         navigate('/dashboard');
       }
     } catch (err) {
@@ -51,13 +40,15 @@ const Login = () => {
     }
   };
 
-  const handleDemoLogin = (role) => {
-    if (role === 'super_admin') {
-      setUsername('admin@kovera.com');
+  const handleDemoLogin = (type) => {
+    if (type === 'super_admin') {
+      setEmail('admin@fresco.com');
       setPassword('admin123');
+      setLoginType('admin');
     } else {
-      setUsername('staff1@kovera.com');
-      setPassword('password123');
+      setEmail('staff@fresco.com');
+      setPassword('staff123');
+      setLoginType('staff');
     }
   };
 
@@ -72,14 +63,14 @@ const Login = () => {
           }}
         >
           {/* Dark overlay for better text contrast */}
-          <div className="absolute inset-0"></div>
+          <div className="absolute inset-0 bg-black/50"></div>
         </div>
         
         {/* Optional: Minimal branding in corner */}
         <div className="relative z-10 p-8">
           <div className="flex items-center space-x-2">
             <Store size={28} className="text-white" />
-            <span className="text-2xl font-bold text-white">KOVERA</span>
+            <span className="text-2xl font-bold text-white">FRESCO</span>
           </div>
         </div>
       </div>
@@ -102,6 +93,32 @@ const Login = () => {
             </p>
           </div>
 
+          {/* Login Type Toggle */}
+          <div className="flex gap-2 p-1 bg-gray-100 rounded-lg">
+            <button
+              type="button"
+              onClick={() => setLoginType('admin')}
+              className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                loginType === 'admin'
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Admin Login
+            </button>
+            <button
+              type="button"
+              onClick={() => setLoginType('staff')}
+              className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                loginType === 'staff'
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Staff Login
+            </button>
+          </div>
+
           {/* Error Message */}
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
@@ -114,19 +131,19 @@ const Login = () => {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Username or Email
+                  Email Address
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <Mail size={18} className="text-gray-400" />
                   </div>
                   <input
-                    type="text"
+                    type="email"
                     required
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                     className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
-                    placeholder="Enter username or email"
+                    placeholder="Enter your email"
                   />
                 </div>
               </div>
@@ -199,7 +216,7 @@ const Login = () => {
                 <div className="w-full border-t border-gray-300"></div>
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">Quick Login</span>
+                <span className="px-2 bg-white text-gray-500">Demo Accounts</span>
               </div>
             </div>
 
