@@ -27,8 +27,36 @@ const getAuthHeaders = () => {
 // ✅ REQUIRED BY BACKEND
 const DEFAULT_LOCATION = "all";
 
+// ✅ Helper function to normalize staff data (ensures name is always present)
+const normalizeStaffData = (staff) => {
+  if (!staff) return null;
+  
+  return {
+    ...staff,
+    // Ensure name is always present (priority: name > username > fullName > email > 'Unnamed')
+    name: staff.name || staff.username || staff.fullName || staff.email?.split('@')[0] || 'Unnamed Staff',
+    // Keep original name fields for reference
+    originalName: staff.name,
+    originalUsername: staff.username,
+    // Ensure id is always present
+    id: staff.id || staff._id,
+    // Ensure email is always present
+    email: staff.email || '',
+    // Ensure role is always present
+    role: staff.role || 'staff',
+    // Ensure isActive is always present
+    isActive: staff.isActive !== undefined ? staff.isActive : true
+  };
+};
+
+// ✅ Helper function to normalize array of staff
+const normalizeStaffList = (staffList) => {
+  if (!Array.isArray(staffList)) return [];
+  return staffList.map(staff => normalizeStaffData(staff));
+};
+
 const staffService = {
-  // ✅ Get all staff
+  // ✅ Get all staff with normalized data
   getAllStaff: async () => {
     try {
       const response = await fetch(
@@ -52,22 +80,18 @@ const staffService = {
         staffList = data.data;
       }
       
-      // Ensure each staff member has a name field (convert username to name if needed)
-      staffList = staffList.map(staff => ({
-        ...staff,
-        name: staff.name || staff.username || staff.fullName || 'No Name',
-        id: staff.id || staff._id
-      }));
+      // Normalize all staff data
+      const normalizedStaff = normalizeStaffList(staffList);
+      console.log('Normalized staff list:', normalizedStaff);
       
-      console.log('Processed staff list:', staffList);
-      return staffList;
+      return normalizedStaff;
     } catch (error) {
       console.error('Error fetching staff:', error);
       throw error;
     }
   },
 
-  // ✅ Get by ID
+  // ✅ Get by ID with normalized data
   getStaffById: async (id) => {
     try {
       const response = await fetch(
@@ -78,22 +102,18 @@ const staffService = {
         }
       );
       const data = await handleResponse(response);
-      return {
-        ...data,
-        name: data.name || data.username || data.fullName || 'No Name',
-        id: data.id || data._id
-      };
+      return normalizeStaffData(data);
     } catch (error) {
       console.error('Error fetching staff by ID:', error);
       throw error;
     }
   },
 
-  // ✅ CREATE STAFF (SAFE PAYLOAD)
+  // ✅ CREATE STAFF
   createStaff: async (staffData) => {
     try {
       const payload = {
-        name: staffData.name,  // Using name as per backend requirement
+        name: staffData.name,
         email: staffData.email,
         password: staffData.password,
         role: staffData.role,
@@ -101,7 +121,6 @@ const staffService = {
         isActive: staffData.isActive !== undefined ? staffData.isActive : true
       };
 
-      // Add phone if provided
       if (staffData.phone) {
         payload.phone = staffData.phone;
       }
@@ -119,11 +138,9 @@ const staffService = {
 
       const result = await handleResponse(response);
       console.log('Staff created successfully:', result);
-      return {
-        ...result,
-        name: result.name || result.username || staffData.name,
-        id: result.id || result._id
-      };
+      
+      // Return normalized data
+      return normalizeStaffData(result);
     } catch (error) {
       console.error('Error creating staff:', error);
       throw error;
@@ -141,12 +158,10 @@ const staffService = {
         isActive: staffData.isActive !== undefined ? staffData.isActive : true
       };
 
-      // Add phone if provided
       if (staffData.phone) {
         payload.phone = staffData.phone;
       }
 
-      // Only include password if it's provided
       if (staffData.password && staffData.password.trim() !== '') {
         payload.password = staffData.password;
       }
@@ -164,11 +179,9 @@ const staffService = {
 
       const result = await handleResponse(response);
       console.log('Staff updated successfully:', result);
-      return {
-        ...result,
-        name: result.name || result.username || staffData.name,
-        id: result.id || result._id || id
-      };
+      
+      // Return normalized data
+      return normalizeStaffData(result);
     } catch (error) {
       console.error('Error updating staff:', error);
       throw error;
@@ -234,11 +247,7 @@ const staffService = {
         staffList = [];
       }
       
-      return staffList.map(staff => ({
-        ...staff,
-        name: staff.name || staff.username || staff.fullName || 'No Name',
-        id: staff.id || staff._id
-      }));
+      return normalizeStaffList(staffList);
     } catch (error) {
       console.error('Error fetching staff by role:', error);
       throw error;

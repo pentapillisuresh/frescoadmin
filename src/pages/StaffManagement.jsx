@@ -1,5 +1,5 @@
 // src/pages/StaffManagement.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Edit, Trash2, User, Mail, RefreshCw, AlertCircle, Phone } from 'lucide-react';
 import staffService from '../services/staffService';
 import { useAuth } from '../contexts/AuthContext';
@@ -24,38 +24,29 @@ const StaffManagement = () => {
   console.log('StaffManagement - User from auth:', user);
   console.log('StaffManagement - Is super admin:', isSuperAdmin);
 
-  // Fetch staff data from API
-  const fetchStaff = async () => {
+  // ✅ Memoized fetch function to prevent unnecessary re-renders
+  const fetchStaff = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const data = await staffService.getAllStaff();
-      console.log('Fetched staff data:', data);
+      console.log('Fetched and normalized staff data:', data);
       
-      // Ensure we have an array
-      const staffList = Array.isArray(data) ? data : [];
-      
-      // Process staff data to ensure name field exists
-      const processedStaff = staffList.map(staffMember => ({
-        ...staffMember,
-        displayName: staffMember.name || staffMember.username || staffMember.fullName || 'Unnamed Staff',
-        id: staffMember.id || staffMember._id
-      }));
-      
-      setStaff(processedStaff);
+      // Data is already normalized by staffService
+      setStaff(data);
     } catch (err) {
       setError(err.message || 'Failed to fetch staff data');
       console.error('Error fetching staff:', err);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (isSuperAdmin) {
       fetchStaff();
     }
-  }, [isSuperAdmin]);
+  }, [isSuperAdmin, fetchStaff]);
 
   // Clear success message after 3 seconds
   useEffect(() => {
@@ -80,7 +71,6 @@ const StaffManagement = () => {
         throw new Error('Password is required for new staff members');
       }
 
-      // Password length validation
       if (!editingStaff && formData.password && formData.password.length < 6) {
         throw new Error('Password must be at least 6 characters long');
       }
@@ -93,7 +83,6 @@ const StaffManagement = () => {
         isActive: formData.isActive
       };
 
-      // Add phone if available
       if (formData.phone && formData.phone.trim()) {
         submitData.phone = formData.phone.trim();
       }
@@ -103,32 +92,18 @@ const StaffManagement = () => {
       if (editingStaff) {
         // Update existing staff
         const updatedStaff = await staffService.updateStaff(
-          editingStaff.id || editingStaff._id, 
+          editingStaff.id, 
           submitData
         );
         
-        setStaff(staff.map(s => {
-          if (s.id === editingStaff.id || s._id === editingStaff._id) {
-            return {
-              ...s,
-              ...updatedStaff,
-              displayName: updatedStaff.name || updatedStaff.username || submitData.name,
-              name: updatedStaff.name || submitData.name
-            };
-          }
-          return s;
-        }));
+        setStaff(prevStaff => 
+          prevStaff.map(s => s.id === editingStaff.id ? updatedStaff : s)
+        );
         setSuccessMessage('Staff member updated successfully!');
       } else {
         // Create new staff
         const newStaff = await staffService.createStaff(submitData);
-        const newStaffWithDisplay = {
-          ...newStaff,
-          displayName: newStaff.name || newStaff.username || submitData.name,
-          name: newStaff.name || submitData.name,
-          id: newStaff.id || newStaff._id
-        };
-        setStaff([...staff, newStaffWithDisplay]);
+        setStaff(prevStaff => [...prevStaff, newStaff]);
         setSuccessMessage('Staff member created successfully!');
       }
       
@@ -157,7 +132,7 @@ const StaffManagement = () => {
   const handleEdit = (staffMember) => {
     setEditingStaff(staffMember);
     setFormData({
-      name: staffMember.name || staffMember.username || staffMember.displayName || '',
+      name: staffMember.name || '',
       email: staffMember.email || '',
       phone: staffMember.phone || '',
       password: '',
@@ -173,7 +148,7 @@ const StaffManagement = () => {
       setError(null);
       try {
         await staffService.deleteStaff(id);
-        setStaff(staff.filter(s => (s.id !== id && s._id !== id)));
+        setStaff(prevStaff => prevStaff.filter(s => s.id !== id));
         setSuccessMessage('Staff member deleted successfully!');
       } catch (err) {
         setError(err.message || 'Failed to delete staff member');
@@ -188,16 +163,13 @@ const StaffManagement = () => {
     setLoading(true);
     setError(null);
     try {
-      const staffMember = staff.find(s => (s.id === id || s._id === id));
-      if (!staffMember) return;
-      
-      await staffService.toggleStaffStatus(id, !staffMember.isActive);
-      setStaff(staff.map(s => 
-        (s.id === id || s._id === id) 
-          ? { ...s, isActive: !staffMember.isActive } 
-          : s
-      ));
-      setSuccessMessage(`Staff member ${!staffMember.isActive ? 'activated' : 'deactivated'} successfully!`);
+      await staffService.toggleStaffStatus(id, !staff.find(s => s.id === id)?.isActive);
+      setStaff(prevStaff => 
+        prevStaff.map(s => 
+          s.id === id ? { ...s, isActive: !s.isActive } : s
+        )
+      );
+      setSuccessMessage('Staff status updated successfully!');
     } catch (err) {
       setError(err.message || 'Failed to update staff status');
       console.error('Error toggling status:', err);
@@ -206,9 +178,11 @@ const StaffManagement = () => {
     }
   };
 
-  // Helper function to get display name
+  // ✅ Helper function to safely get display name
   const getDisplayName = (staffMember) => {
-    return staffMember.displayName || staffMember.name || staffMember.username || 'Unnamed Staff';
+    if (!staffMember) return 'Unknown';
+    // staffMember.name is guaranteed to exist because of normalization
+    return staffMember.name || staffMember.email?.split('@')[0] || 'Unnamed Staff';
   };
 
   // Show loading state while checking authentication
@@ -306,7 +280,7 @@ const StaffManagement = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {staff.map(staffMember => (
-            <div key={staffMember.id || staffMember._id} className="bg-white rounded-xl shadow-sm border p-6 hover:shadow-md transition-shadow">
+            <div key={staffMember.id} className="bg-white rounded-xl shadow-sm border p-6 hover:shadow-md transition-shadow">
               <div className="flex justify-between items-start mb-4">
                 <div className="flex items-center space-x-3">
                   <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
@@ -341,13 +315,13 @@ const StaffManagement = () => {
                 <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <span className="text-sm text-gray-600">Status</span>
                   <button
-                    onClick={() => handleToggleStatus(staffMember.id || staffMember._id)}
-                    disabled={loading || staffMember.role === 'super_admin' || (staffMember.id === user?.id || staffMember._id === user?.id)}
+                    onClick={() => handleToggleStatus(staffMember.id)}
+                    disabled={loading || staffMember.role === 'super_admin' || staffMember.id === user?.id}
                     className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
                       staffMember.isActive 
                         ? 'bg-green-100 text-green-800 hover:bg-green-200' 
                         : 'bg-red-100 text-red-800 hover:bg-red-200'
-                    } ${(loading || staffMember.role === 'super_admin' || staffMember.id === user?.id || staffMember._id === user?.id) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                    } ${(loading || staffMember.role === 'super_admin' || staffMember.id === user?.id) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                   >
                     {staffMember.isActive ? 'Active' : 'Disabled'}
                   </button>
@@ -363,9 +337,9 @@ const StaffManagement = () => {
                   <Edit size={14} />
                   <span>Edit</span>
                 </button>
-                {staffMember.role !== 'super_admin' && staffMember.id !== user?.id && staffMember._id !== user?.id && (
+                {staffMember.role !== 'super_admin' && staffMember.id !== user?.id && (
                   <button
-                    onClick={() => handleDelete(staffMember.id || staffMember._id)}
+                    onClick={() => handleDelete(staffMember.id)}
                     disabled={loading}
                     className="px-4 py-2 text-sm border border-red-300 text-red-700 rounded-lg hover:bg-red-50 transition-colors flex items-center space-x-2 disabled:opacity-50"
                   >
