@@ -133,118 +133,127 @@ const GroceryProductForm = ({ product, onSave, onClose, productType = 'retail' }
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+ const handleSubmit = async (e) => {
+  e.preventDefault();
+  
+  if (!formData.name.trim()) {
+    alert('Please enter product name');
+    return;
+  }
+
+  if (!formData.categoryId) {
+    alert('Please select a category');
+    return;
+  }
+
+  if (!formData.retailPrice) {
+    alert('Please enter retail price');
+    return;
+  }
+
+  if (parseFloat(formData.retailPrice) <= 0) {
+    alert('Retail price must be greater than 0');
+    return;
+  }
+
+  if (!formData.wholesalePrice) {
+    alert('Please enter wholesale price');
+    return;
+  }
+
+  if (parseFloat(formData.wholesalePrice) <= 0) {
+    alert('Wholesale price must be greater than 0');
+    return;
+  }
+
+  if (!formData.wholesaleMOQ) {
+    alert('Please enter wholesale minimum order quantity');
+    return;
+  }
+
+  if (!formData.unit) {
+    alert('Please select a unit');
+    return;
+  }
+
+  setUploading(true);
+  
+  try {
+    const submitData = new FormData();
+    submitData.append('name', formData.name);
     
-    if (!formData.name.trim()) {
-      alert('Please enter product name');
-      return;
-    }
-
-    if (!formData.categoryId) {
-      alert('Please select a category');
-      return;
-    }
-
-    if (!formData.retailPrice) {
-      alert('Please enter retail price');
-      return;
-    }
-
-    if (parseFloat(formData.retailPrice) <= 0) {
-      alert('Retail price must be greater than 0');
-      return;
-    }
-
-    if (!formData.wholesalePrice) {
-      alert('Please enter wholesale price');
-      return;
-    }
-
-    if (parseFloat(formData.wholesalePrice) <= 0) {
-      alert('Wholesale price must be greater than 0');
-      return;
-    }
-
-    if (!formData.wholesaleMOQ) {
-      alert('Please enter wholesale minimum order quantity');
-      return;
-    }
-
-    if (!formData.unit) {
-      alert('Please select a unit');
-      return;
-    }
-
-    setUploading(true);
+    // IMPORTANT: Only send category field with the ID, not categoryId
+    // The backend expects 'category' field with the category ID
+    submitData.append('category', formData.categoryId);
     
-    try {
-      const submitData = new FormData();
-      submitData.append('name', formData.name);
-      // Send category as categoryId to match backend expectations
-      submitData.append('categoryId', formData.categoryId);
-      // Also send category for backward compatibility
-      submitData.append('category', formData.categoryId);
-      
-      if (formData.subCategory) {
-        submitData.append('subCategory', formData.subCategory);
-      }
-      
-      if (formData.description) {
-        submitData.append('description', formData.description);
-      }
-      
-      submitData.append('retailPrice', parseFloat(formData.retailPrice));
-      submitData.append('wholesalePrice', parseFloat(formData.wholesalePrice));
-      submitData.append('wholesaleMOQ', parseInt(formData.wholesaleMOQ));
-      
-      if (formData.availableQuantity) {
-        submitData.append('availableQuantity', parseInt(formData.availableQuantity));
-      }
-      
-      submitData.append('unit', formData.unit);
-      
-      if (formData.weight) {
-        submitData.append('weight', parseFloat(formData.weight));
-      }
-      
-      if (formData.image) {
-        submitData.append('image', formData.image);
-      }
-
-      submitData.append('isActive', formData.isActive);
-
-      let savedProduct;
-      if (product && product._id) {
-        console.log('Updating product with ID:', product._id);
-        savedProduct = await productService.updateProduct(product._id, submitData, productType);
-      } else {
-        savedProduct = await productService.createProduct(submitData, productType);
-      }
-      
-      if (formData.imagePreview && formData.image) {
-        URL.revokeObjectURL(formData.imagePreview);
-      }
-      
-      onSave(savedProduct);
-    } catch (error) {
-      console.error('Error saving product:', error);
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to save product. Please try again.';
-      
-      // Show more detailed error
-      if (error.response?.data?.errors) {
-        const errors = error.response.data.errors;
-        const errorMessages = Object.values(errors).flat();
-        alert(errorMessages.join('\n'));
-      } else if (Array.isArray(errorMessage)) {
-        alert(errorMessage.join('\n'));
-      } else {
-        alert(errorMessage);
-      }
-    } finally {
-      setUploading(false);
+    if (formData.subCategory) {
+      submitData.append('subCategory', formData.subCategory);
     }
-  };
+    
+    if (formData.description) {
+      submitData.append('description', formData.description);
+    }
+    
+    submitData.append('retailPrice', parseFloat(formData.retailPrice));
+    submitData.append('wholesalePrice', parseFloat(formData.wholesalePrice));
+    submitData.append('wholesaleMOQ', parseInt(formData.wholesaleMOQ));
+    
+    if (formData.availableQuantity) {
+      submitData.append('availableQuantity', parseInt(formData.availableQuantity));
+    }
+    
+    submitData.append('unit', formData.unit);
+    
+    if (formData.weight) {
+      submitData.append('weight', parseFloat(formData.weight));
+    }
+    
+    // Only append image if it's a new file (not existing image)
+    if (formData.image) {
+      submitData.append('image', formData.image);
+    }
+
+    submitData.append('isActive', formData.isActive);
+
+    let savedProduct;
+    if (product && product._id) {
+      console.log('Updating product with ID:', product._id);
+      
+      // Log all form data being sent for debugging
+      console.log('Form data being sent:');
+      for (let pair of submitData.entries()) {
+        console.log(pair[0] + ': ' + (pair[1] instanceof File ? pair[1].name : pair[1]));
+      }
+      
+      savedProduct = await productService.updateProduct(product._id, submitData, productType);
+      console.log('Update response:', savedProduct);
+    } else {
+      savedProduct = await productService.createProduct(submitData, productType);
+    }
+    
+    if (formData.imagePreview && formData.image) {
+      URL.revokeObjectURL(formData.imagePreview);
+    }
+    
+    onSave(savedProduct);
+  } catch (error) {
+    console.error('Error saving product:', error);
+    const errorMessage = error.response?.data?.message || error.message || 'Failed to save product. Please try again.';
+    
+    // Show more detailed error
+    if (error.response?.data?.errors) {
+      const errors = error.response.data.errors;
+      const errorMessages = Object.values(errors).flat();
+      alert(errorMessages.join('\n'));
+    } else if (Array.isArray(errorMessage)) {
+      alert(errorMessage.join('\n'));
+    } else {
+      alert(errorMessage);
+    }
+  } finally {
+    setUploading(false);
+  }
+};
 
   const unitOptions = [
     'piece', 'kilogram', 'gram', 'liter', 'milliliter', 

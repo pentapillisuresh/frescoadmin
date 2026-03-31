@@ -64,32 +64,45 @@ const productService = {
   },
 
   // Update product
-  updateProduct: async (productId, formData, productType = 'retail') => {
-    try {
-      const url = `${API_ENDPOINTS.PRODUCTS.BASE}/${productId}`;
-      console.log('Updating product at URL:', url);
-      
-      const response = await axiosInstance.put(
-        url,
-        formData,
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-        }
-      );
-       console.log('Update response:', response.data);
-      const product = response.data;
-      return {
-        ...product,
-        imageUrl: product.image ? `${API_BASE_URL}${product.image.startsWith('/') ? product.image : '/' + product.image}` : null
-      };
-    } catch (error) {
-      console.error('Error updating product:', error);
-      console.error('Error response:', error.response?.data);
-      throw error;
+ // Update product
+updateProduct: async (productId, formData, productType = 'retail') => {
+  try {
+    const url = `${API_ENDPOINTS.PRODUCTS.BASE}/${productId}`;
+    console.log('Updating product at URL:', url);
+    console.log('Product ID being updated:', productId);
+    
+    // Log all form data entries
+    console.log('FormData contents for update:');
+    for (let pair of formData.entries()) {
+      console.log(pair[0] + ': ' + (pair[1] instanceof File ? pair[1].name : pair[1]));
     }
-  },
+    
+    const response = await axiosInstance.put(
+      url,
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      }
+    );
+    
+    console.log('Update response status:', response.status);
+    console.log('Update response data:', response.data);
+    
+    const product = response.data;
+    return {
+      ...product,
+      imageUrl: product.image ? `${API_BASE_URL}${product.image.startsWith('/') ? product.image : '/' + product.image}` : null
+    };
+  } catch (error) {
+    console.error('Error updating product:', error);
+    console.error('Error response status:', error.response?.status);
+    console.error('Error response data:', error.response?.data);
+    console.error('Error response headers:', error.response?.headers);
+    throw error;
+  }
+},
 
   // Delete product
   deleteProduct: async (productId) => {

@@ -98,11 +98,21 @@ const RetailProducts = ({ userRole }) => {
   };
 
   const handleEditProduct = (product) => {
-    console.log('Editing product:', product);
-    console.log('Product ID:', product._id);
-    setEditingProduct(product);
-    setShowGroceryForm(true);
-  };
+  console.log('=== Edit Product Debug ===');
+  console.log('Editing product object:', product);
+  console.log('Product ID:', product._id);
+  console.log('Product ID type:', typeof product._id);
+  console.log('Product name:', product.name);
+  
+  if (!product._id) {
+    console.error('Product ID is missing!');
+    toast.error('Cannot edit product: ID missing');
+    return;
+  }
+  
+  setEditingProduct(product);
+  setShowGroceryForm(true);
+};
 
   const handleDeleteClick = (product) => {
     console.log('Delete clicked for product:', product.name);
@@ -137,33 +147,46 @@ const RetailProducts = ({ userRole }) => {
     setProductToDelete(null);
   };
 
-  const handleSaveProduct = (updatedProduct) => {
-    console.log('Saved/Updated product:', updatedProduct);
-    console.log('Product ID:', updatedProduct._id);
-    try {
-      // Update local state immediately
-      setProducts(prev => {
-        const exists = prev.some(p => p._id === updatedProduct._id);
-        
-        if (exists) {
-          return prev.map(p =>
-            p._id === updatedProduct._id ? updatedProduct : p
-          );
-        } else {
-          return [updatedProduct, ...prev];
-        }
-      });
+ const handleSaveProduct = (updatedProduct) => {
+  console.log('=== Save Product Debug ===');
+  console.log('Received product from form:', updatedProduct);
+  console.log('Product ID:', updatedProduct._id);
+  console.log('Product name:', updatedProduct.name);
+  console.log('Product category:', updatedProduct.category);
+  
+  try {
+    // Update local state immediately
+    setProducts(prev => {
+      const exists = prev.some(p => p._id === updatedProduct._id);
+      console.log('Product exists in list:', exists);
       
-      setShowGroceryForm(false);
-      setEditingProduct(null);
-      
-      toast.success(`Product ${updatedProduct._id ? 'updated' : 'added'} successfully`);
-    } catch (error) {
-      console.error('Error in handleSaveProduct:', error);
-      toast.error('Failed to save product');
-    }
-  };
-
+      if (exists) {
+        console.log('Updating existing product with ID:', updatedProduct._id);
+        const updatedList = prev.map(p =>
+          p._id === updatedProduct._id ? updatedProduct : p
+        );
+        console.log('Updated list length:', updatedList.length);
+        return updatedList;
+      } else {
+        console.log('Adding new product');
+        return [updatedProduct, ...prev];
+      }
+    });
+    
+    setShowGroceryForm(false);
+    setEditingProduct(null);
+    
+    toast.success(`Product ${updatedProduct._id ? 'updated' : 'added'} successfully`);
+    
+    // Optional: Reload products to ensure data consistency
+    setTimeout(() => {
+      loadProducts();
+    }, 1000);
+  } catch (error) {
+    console.error('Error in handleSaveProduct:', error);
+    toast.error('Failed to save product');
+  }
+};
   const handleToggleStatus = async (product) => {
     try {
       await productService.toggleProductStatus(product._id, !product.isActive);
