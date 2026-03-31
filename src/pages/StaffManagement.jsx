@@ -1,6 +1,6 @@
 // src/pages/StaffManagement.jsx
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, User, Mail, RefreshCw, AlertCircle } from 'lucide-react';
+import { Plus, Edit, Trash2, User, Mail, RefreshCw, AlertCircle, Phone } from 'lucide-react';
 import staffService from '../services/staffService';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -15,6 +15,7 @@ const StaffManagement = () => {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
+    phone: '',
     password: '',
     role: 'staff',
     isActive: true
@@ -29,11 +30,19 @@ const StaffManagement = () => {
     setError(null);
     try {
       const data = await staffService.getAllStaff();
-      // Handle different response structures
-      const staffList = Array.isArray(data) ? data : 
-                       data?.users ? data.users : 
-                       data?.data ? data.data : [];
-      setStaff(staffList);
+      console.log('Fetched staff data:', data);
+      
+      // Ensure we have an array
+      const staffList = Array.isArray(data) ? data : [];
+      
+      // Process staff data to ensure name field exists
+      const processedStaff = staffList.map(staffMember => ({
+        ...staffMember,
+        displayName: staffMember.name || staffMember.username || staffMember.fullName || 'Unnamed Staff',
+        id: staffMember.id || staffMember._id
+      }));
+      
+      setStaff(processedStaff);
     } catch (err) {
       setError(err.message || 'Failed to fetch staff data');
       console.error('Error fetching staff:', err);
@@ -62,15 +71,64 @@ const StaffManagement = () => {
     setError(null);
 
     try {
+      // Validate required fields
+      if (!formData.name || !formData.email) {
+        throw new Error('Name and email are required fields');
+      }
+
+      if (!editingStaff && !formData.password) {
+        throw new Error('Password is required for new staff members');
+      }
+
+      // Password length validation
+      if (!editingStaff && formData.password && formData.password.length < 6) {
+        throw new Error('Password must be at least 6 characters long');
+      }
+
+      const submitData = {
+        name: formData.name.trim(),
+        email: formData.email.trim().toLowerCase(),
+        password: formData.password,
+        role: formData.role,
+        isActive: formData.isActive
+      };
+
+      // Add phone if available
+      if (formData.phone && formData.phone.trim()) {
+        submitData.phone = formData.phone.trim();
+      }
+
+      console.log('Submitting staff data:', submitData);
+
       if (editingStaff) {
         // Update existing staff
-        const updatedStaff = await staffService.updateStaff(editingStaff.id, formData);
-        setStaff(staff.map(s => s.id === editingStaff.id ? { ...s, ...updatedStaff } : s));
+        const updatedStaff = await staffService.updateStaff(
+          editingStaff.id || editingStaff._id, 
+          submitData
+        );
+        
+        setStaff(staff.map(s => {
+          if (s.id === editingStaff.id || s._id === editingStaff._id) {
+            return {
+              ...s,
+              ...updatedStaff,
+              displayName: updatedStaff.name || updatedStaff.username || submitData.name,
+              name: updatedStaff.name || submitData.name
+            };
+          }
+          return s;
+        }));
         setSuccessMessage('Staff member updated successfully!');
       } else {
         // Create new staff
-        const newStaff = await staffService.createStaff(formData);
-        setStaff([...staff, { ...newStaff, id: newStaff.id || Date.now() }]);
+        const newStaff = await staffService.createStaff(submitData);
+        const newStaffWithDisplay = {
+          ...newStaff,
+          displayName: newStaff.name || newStaff.username || submitData.name,
+          name: newStaff.name || submitData.name,
+          id: newStaff.id || newStaff._id
+        };
+        setStaff([...staff, newStaffWithDisplay]);
         setSuccessMessage('Staff member created successfully!');
       }
       
@@ -89,6 +147,7 @@ const StaffManagement = () => {
     setFormData({
       name: '',
       email: '',
+      phone: '',
       password: '',
       role: 'staff',
       isActive: true
@@ -98,9 +157,10 @@ const StaffManagement = () => {
   const handleEdit = (staffMember) => {
     setEditingStaff(staffMember);
     setFormData({
-      name: staffMember.name || staffMember.username || '',
+      name: staffMember.name || staffMember.username || staffMember.displayName || '',
       email: staffMember.email || '',
-      password: '', // Don't populate password for security
+      phone: staffMember.phone || '',
+      password: '',
       role: staffMember.role || 'staff',
       isActive: staffMember.isActive !== undefined ? staffMember.isActive : true
     });
@@ -113,7 +173,7 @@ const StaffManagement = () => {
       setError(null);
       try {
         await staffService.deleteStaff(id);
-        setStaff(staff.filter(s => s.id !== id));
+        setStaff(staff.filter(s => (s.id !== id && s._id !== id)));
         setSuccessMessage('Staff member deleted successfully!');
       } catch (err) {
         setError(err.message || 'Failed to delete staff member');
@@ -128,9 +188,15 @@ const StaffManagement = () => {
     setLoading(true);
     setError(null);
     try {
-      const staffMember = staff.find(s => s.id === id);
-      const updatedStaff = await staffService.toggleStaffStatus(id, !staffMember.isActive);
-      setStaff(staff.map(s => s.id === id ? { ...s, ...updatedStaff, isActive: !staffMember.isActive } : s));
+      const staffMember = staff.find(s => (s.id === id || s._id === id));
+      if (!staffMember) return;
+      
+      await staffService.toggleStaffStatus(id, !staffMember.isActive);
+      setStaff(staff.map(s => 
+        (s.id === id || s._id === id) 
+          ? { ...s, isActive: !staffMember.isActive } 
+          : s
+      ));
       setSuccessMessage(`Staff member ${!staffMember.isActive ? 'activated' : 'deactivated'} successfully!`);
     } catch (err) {
       setError(err.message || 'Failed to update staff status');
@@ -138,6 +204,11 @@ const StaffManagement = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Helper function to get display name
+  const getDisplayName = (staffMember) => {
+    return staffMember.displayName || staffMember.name || staffMember.username || 'Unnamed Staff';
   };
 
   // Show loading state while checking authentication
@@ -189,7 +260,9 @@ const StaffManagement = () => {
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Staff Management</h1>
           <p className="text-gray-600">Manage staff accounts and permissions (Super Admin Only)</p>
-          <p className="text-sm text-green-600 mt-1">✓ Logged in as: {user?.name || user?.username} ({user?.role})</p>
+          <p className="text-sm text-green-600 mt-1">
+            ✓ Logged in as: {user?.name || user?.username || 'Admin'} ({user?.role})
+          </p>
         </div>
         <button
           onClick={() => setShowForm(true)}
@@ -240,11 +313,19 @@ const StaffManagement = () => {
                     <User size={24} className="text-gray-600" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-lg text-gray-800">{staffMember.name || staffMember.username}</h3>
+                    <h3 className="font-bold text-lg text-gray-800">
+                      {getDisplayName(staffMember)}
+                    </h3>
                     <p className="text-sm text-gray-500 flex items-center space-x-1">
                       <Mail size={14} />
                       <span>{staffMember.email}</span>
                     </p>
+                    {staffMember.phone && (
+                      <p className="text-sm text-gray-500 flex items-center space-x-1 mt-1">
+                        <Phone size={14} />
+                        <span>{staffMember.phone}</span>
+                      </p>
+                    )}
                   </div>
                 </div>
                 <span className={`px-3 py-1 text-xs rounded-full ${
@@ -261,12 +342,12 @@ const StaffManagement = () => {
                   <span className="text-sm text-gray-600">Status</span>
                   <button
                     onClick={() => handleToggleStatus(staffMember.id || staffMember._id)}
-                    disabled={loading || staffMember.role === 'super_admin' || staffMember.id === user?.id}
+                    disabled={loading || staffMember.role === 'super_admin' || (staffMember.id === user?.id || staffMember._id === user?.id)}
                     className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
                       staffMember.isActive 
                         ? 'bg-green-100 text-green-800 hover:bg-green-200' 
                         : 'bg-red-100 text-red-800 hover:bg-red-200'
-                    } ${(loading || staffMember.role === 'super_admin' || staffMember.id === user?.id) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                    } ${(loading || staffMember.role === 'super_admin' || staffMember.id === user?.id || staffMember._id === user?.id) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                   >
                     {staffMember.isActive ? 'Active' : 'Disabled'}
                   </button>
@@ -282,7 +363,7 @@ const StaffManagement = () => {
                   <Edit size={14} />
                   <span>Edit</span>
                 </button>
-                {staffMember.role !== 'super_admin' && staffMember.id !== user?.id && (
+                {staffMember.role !== 'super_admin' && staffMember.id !== user?.id && staffMember._id !== user?.id && (
                   <button
                     onClick={() => handleDelete(staffMember.id || staffMember._id)}
                     disabled={loading}
@@ -342,6 +423,19 @@ const StaffManagement = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Phone Number
+                </label>
+                <input
+                  type="tel"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  placeholder="Enter phone number (optional)"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Password {!editingStaff && '*'}
                 </label>
                 <input
@@ -349,8 +443,9 @@ const StaffManagement = () => {
                   value={formData.password}
                   onChange={(e) => setFormData({...formData, password: e.target.value})}
                   required={!editingStaff}
+                  minLength="6"
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  placeholder={editingStaff ? "Leave blank to keep current password" : "Enter password"}
+                  placeholder={editingStaff ? "Leave blank to keep current password" : "Enter password (min 6 characters)"}
                 />
                 {editingStaff && (
                   <p className="text-xs text-gray-500 mt-1">

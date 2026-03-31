@@ -1,122 +1,190 @@
 // src/services/staffService.js
 import API_BASE_URL, { API_ENDPOINTS } from '../config/api';
 
-// Helper function for handling API responses
+// Handle API response
 const handleResponse = async (response) => {
   if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.message || `HTTP error! status: ${response.status}`);
+    const errorData = await response.json().catch(() => ({}));
+    console.error('API Error Response:', errorData);
+    throw new Error(
+      errorData.message ||
+      errorData.error ||
+      `HTTP error! status: ${response.status}`
+    );
   }
   return response.json();
 };
 
-// Helper function for adding auth token to headers
+// Auth headers
 const getAuthHeaders = () => {
   const token = localStorage.getItem('accessToken');
-  console.log('Token from storage:', token ? 'Present' : 'Missing');
-  
   return {
     'Content-Type': 'application/json',
     'Authorization': token ? `Bearer ${token}` : '',
   };
 };
 
+// ✅ REQUIRED BY BACKEND
+const DEFAULT_LOCATION = "all";
+
 const staffService = {
-  // Get all staff members (admin/staff users)
+  // ✅ Get all staff
   getAllStaff: async () => {
     try {
-      console.log('Fetching staff from:', `${API_BASE_URL}${API_ENDPOINTS.USERS.ADMIN_LIST}`);
-      const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.USERS.ADMIN_LIST}`, {
-        method: 'GET',
-        headers: getAuthHeaders(),
-      });
+      const response = await fetch(
+        `${API_BASE_URL}${API_ENDPOINTS.USERS.ADMIN_LIST}`,
+        {
+          method: 'GET',
+          headers: getAuthHeaders(),
+        }
+      );
+
       const data = await handleResponse(response);
-      console.log('Staff data received:', data);
-      return data.users || data.data || data;
+      console.log('Raw staff data from API:', data);
+      
+      // Handle different response structures
+      let staffList = [];
+      if (Array.isArray(data)) {
+        staffList = data;
+      } else if (data.users && Array.isArray(data.users)) {
+        staffList = data.users;
+      } else if (data.data && Array.isArray(data.data)) {
+        staffList = data.data;
+      }
+      
+      // Ensure each staff member has a name field (convert username to name if needed)
+      staffList = staffList.map(staff => ({
+        ...staff,
+        name: staff.name || staff.username || staff.fullName || 'No Name',
+        id: staff.id || staff._id
+      }));
+      
+      console.log('Processed staff list:', staffList);
+      return staffList;
     } catch (error) {
       console.error('Error fetching staff:', error);
       throw error;
     }
   },
 
-  // Get staff member by ID
+  // ✅ Get by ID
   getStaffById: async (id) => {
     try {
-      const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.USERS.ADMIN_UPDATE(id)}`, {
-        method: 'GET',
-        headers: getAuthHeaders(),
-      });
-      return await handleResponse(response);
+      const response = await fetch(
+        `${API_BASE_URL}${API_ENDPOINTS.USERS.ADMIN_UPDATE(id)}`,
+        {
+          method: 'GET',
+          headers: getAuthHeaders(),
+        }
+      );
+      const data = await handleResponse(response);
+      return {
+        ...data,
+        name: data.name || data.username || data.fullName || 'No Name',
+        id: data.id || data._id
+      };
     } catch (error) {
       console.error('Error fetching staff by ID:', error);
       throw error;
     }
   },
 
-  // Create new staff member (super-admin only)
+  // ✅ CREATE STAFF (SAFE PAYLOAD)
   createStaff: async (staffData) => {
     try {
-      // Prepare data according to backend requirements
       const payload = {
-        name: staffData.name,           // Changed from username to name
+        name: staffData.name,  // Using name as per backend requirement
         email: staffData.email,
         password: staffData.password,
         role: staffData.role,
-        isActive: staffData.isActive,
-        location: "Main Branch"        // Add default location since backend requires it
+        location: DEFAULT_LOCATION,
+        isActive: staffData.isActive !== undefined ? staffData.isActive : true
       };
 
-      console.log('Creating staff with payload:', payload);
-      const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.USERS.ADMIN_CREATE}`, {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(payload),
-      });
-      return await handleResponse(response);
+      // Add phone if provided
+      if (staffData.phone) {
+        payload.phone = staffData.phone;
+      }
+
+      console.log('Creating staff payload:', payload);
+
+      const response = await fetch(
+        `${API_BASE_URL}${API_ENDPOINTS.USERS.ADMIN_CREATE}`,
+        {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify(payload),
+        }
+      );
+
+      const result = await handleResponse(response);
+      console.log('Staff created successfully:', result);
+      return {
+        ...result,
+        name: result.name || result.username || staffData.name,
+        id: result.id || result._id
+      };
     } catch (error) {
       console.error('Error creating staff:', error);
       throw error;
     }
   },
 
-  // Update staff member (super-admin only)
+  // ✅ UPDATE STAFF
   updateStaff: async (id, staffData) => {
     try {
-      // Prepare data for update
       const payload = {
-        name: staffData.name,           // Changed from username to name
+        name: staffData.name,
         email: staffData.email,
         role: staffData.role,
-        isActive: staffData.isActive,
-        location: "Main Branch"        // Add default location since backend requires it
+        location: DEFAULT_LOCATION,
+        isActive: staffData.isActive !== undefined ? staffData.isActive : true
       };
-      
-      // Only include password if it's provided (for update)
+
+      // Add phone if provided
+      if (staffData.phone) {
+        payload.phone = staffData.phone;
+      }
+
+      // Only include password if it's provided
       if (staffData.password && staffData.password.trim() !== '') {
         payload.password = staffData.password;
       }
 
-      console.log('Updating staff with payload:', payload);
-      const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.USERS.ADMIN_UPDATE(id)}`, {
-        method: 'PUT',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(payload),
-      });
-      return await handleResponse(response);
+      console.log('Updating staff payload:', payload);
+
+      const response = await fetch(
+        `${API_BASE_URL}${API_ENDPOINTS.USERS.ADMIN_UPDATE(id)}`,
+        {
+          method: 'PUT',
+          headers: getAuthHeaders(),
+          body: JSON.stringify(payload),
+        }
+      );
+
+      const result = await handleResponse(response);
+      console.log('Staff updated successfully:', result);
+      return {
+        ...result,
+        name: result.name || result.username || staffData.name,
+        id: result.id || result._id || id
+      };
     } catch (error) {
       console.error('Error updating staff:', error);
       throw error;
     }
   },
 
-  // Delete staff member
+  // ✅ DELETE
   deleteStaff: async (id) => {
     try {
-      console.log('Deleting staff with ID:', id);
-      const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.USERS.ADMIN_UPDATE(id)}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders(),
-      });
+      const response = await fetch(
+        `${API_BASE_URL}${API_ENDPOINTS.USERS.ADMIN_UPDATE(id)}`,
+        {
+          method: 'DELETE',
+          headers: getAuthHeaders(),
+        }
+      );
       return await handleResponse(response);
     } catch (error) {
       console.error('Error deleting staff:', error);
@@ -124,15 +192,23 @@ const staffService = {
     }
   },
 
-  // Toggle staff status
+  // ✅ TOGGLE STATUS
   toggleStaffStatus: async (id, isActive) => {
     try {
-      console.log('Toggling staff status:', id, isActive);
-      const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.USERS.ADMIN_UPDATE(id)}`, {
-        method: 'PUT',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ isActive }),
-      });
+      const payload = {
+        isActive,
+        location: DEFAULT_LOCATION,
+      };
+
+      const response = await fetch(
+        `${API_BASE_URL}${API_ENDPOINTS.USERS.ADMIN_UPDATE(id)}`,
+        {
+          method: 'PUT',
+          headers: getAuthHeaders(),
+          body: JSON.stringify(payload),
+        }
+      );
+
       return await handleResponse(response);
     } catch (error) {
       console.error('Error toggling staff status:', error);
@@ -140,15 +216,29 @@ const staffService = {
     }
   },
 
-  // Get staff by role
+  // ✅ Filter by role
   getStaffByRole: async (role) => {
     try {
-      const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.USERS.ADMIN_LIST}?role=${role}`, {
-        method: 'GET',
-        headers: getAuthHeaders(),
-      });
+      const response = await fetch(
+        `${API_BASE_URL}${API_ENDPOINTS.USERS.ADMIN_LIST}?role=${role}`,
+        {
+          method: 'GET',
+          headers: getAuthHeaders(),
+        }
+      );
+
       const data = await handleResponse(response);
-      return data.users || data.data || data;
+      let staffList = data.users || data.data || data;
+      
+      if (!Array.isArray(staffList)) {
+        staffList = [];
+      }
+      
+      return staffList.map(staff => ({
+        ...staff,
+        name: staff.name || staff.username || staff.fullName || 'No Name',
+        id: staff.id || staff._id
+      }));
     } catch (error) {
       console.error('Error fetching staff by role:', error);
       throw error;
