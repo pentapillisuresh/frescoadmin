@@ -27,33 +27,20 @@ export const AuthProvider = ({ children }) => {
     const storedUser = localStorage.getItem('user');
     
     if (storedToken && storedUser) {
-      setToken(storedToken);
-      setUser(JSON.parse(storedUser));
-      // Verify token validity with backend
-      verifyToken(storedToken);
+      try {
+        setToken(storedToken);
+        setUser(JSON.parse(storedUser));
+        // Set axios default header
+        axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
+      } catch (error) {
+        console.error('Error parsing stored user:', error);
+        // Clear invalid data
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('user');
+      }
     }
     setLoading(false);
   }, []);
-
-  const verifyToken = async (tokenToVerify) => {
-    try {
-      const response = await axios.post(
-        `${API_BASE_URL}${API_ENDPOINTS.AUTH.VERIFY_TOKEN}`,
-        {},
-        {
-          headers: { Authorization: `Bearer ${tokenToVerify}` }
-        }
-      );
-      
-      if (!response.data.valid) {
-        // Token is invalid, logout
-        logout();
-      }
-    } catch (error) {
-      console.error('Token verification failed:', error);
-      logout();
-    }
-  };
 
   const login = async (email, password, isAdmin = false) => {
     try {
@@ -122,21 +109,6 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem('user', JSON.stringify(updatedUser));
   };
 
-  const refreshToken = async () => {
-    try {
-      const response = await axios.post(`${API_BASE_URL}${API_ENDPOINTS.AUTH.REFRESH_TOKEN}`);
-      const { access_token } = response.data;
-      setToken(access_token);
-      localStorage.setItem('accessToken', access_token);
-      axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
-      return access_token;
-    } catch (error) {
-      console.error('Token refresh failed:', error);
-      logout();
-      throw error;
-    }
-  };
-
   const value = {
     user,
     login,
@@ -144,7 +116,6 @@ export const AuthProvider = ({ children }) => {
     updateUser,
     loading,
     token,
-    refreshToken,
     isAuthenticated: !!user && !!token,
     isSuperAdmin: user?.role === 'super_admin',
     isStaff: user?.role === 'staff' || user?.role === 'staff'

@@ -24,15 +24,13 @@ const StaffManagement = () => {
   console.log('StaffManagement - User from auth:', user);
   console.log('StaffManagement - Is super admin:', isSuperAdmin);
 
-  // ✅ Memoized fetch function to prevent unnecessary re-renders
+  // Memoized fetch function
   const fetchStaff = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const data = await staffService.getAllStaff();
       console.log('Fetched and normalized staff data:', data);
-      
-      // Data is already normalized by staffService
       setStaff(data);
     } catch (err) {
       setError(err.message || 'Failed to fetch staff data');
@@ -62,57 +60,81 @@ const StaffManagement = () => {
     setError(null);
 
     try {
-      // Validate required fields
-      if (!formData.name || !formData.email) {
-        throw new Error('Name and email are required fields');
+      // Validation
+      if (!formData.name || !formData.name.trim()) {
+        throw new Error('Name is required');
       }
 
-      if (!editingStaff && !formData.password) {
+      if (!formData.email || !formData.email.trim()) {
+        throw new Error('Email is required');
+      }
+
+      // Email format validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(formData.email)) {
+        throw new Error('Please enter a valid email address');
+      }
+
+      if (!editingStaff && (!formData.password || formData.password.trim() === '')) {
         throw new Error('Password is required for new staff members');
       }
 
-      if (!editingStaff && formData.password && formData.password.length < 6) {
+      if (formData.password && formData.password.length < 6) {
         throw new Error('Password must be at least 6 characters long');
       }
 
       const submitData = {
         name: formData.name.trim(),
         email: formData.email.trim().toLowerCase(),
-        password: formData.password,
         role: formData.role,
-        isActive: formData.isActive
+        isActive: formData.isActive,
+        phone: formData.phone?.trim() || '',
       };
 
-      if (formData.phone && formData.phone.trim()) {
-        submitData.phone = formData.phone.trim();
+      // Add password only if it's provided and not empty
+      if (formData.password && formData.password.trim() !== '') {
+        submitData.password = formData.password;
       }
 
       console.log('Submitting staff data:', submitData);
 
+      let updatedStaffMember = null;
+      
       if (editingStaff) {
-        // Update existing staff
-        const updatedStaff = await staffService.updateStaff(
-          editingStaff.id, 
-          submitData
-        );
+        // UPDATE - Get the updated data back
+        console.log('Updating staff with ID:', editingStaff.id);
+        updatedStaffMember = await staffService.updateStaff(editingStaff.id, submitData);
+        console.log('Updated staff member from API:', updatedStaffMember);
         
-        setStaff(prevStaff => 
-          prevStaff.map(s => s.id === editingStaff.id ? updatedStaff : s)
-        );
+        // CRITICAL FIX: Update the staff list immediately without refetching
+       setStaff(prevStaff =>
+  prevStaff.map(s =>
+    (s._id || s.id) === (editingStaff._id || editingStaff.id)
+      ? { ...s, ...submitData }   // ✅ use form data
+      : s
+  )
+);
+await fetchStaff();
+        
         setSuccessMessage('Staff member updated successfully!');
       } else {
-        // Create new staff
+        // CREATE
         const newStaff = await staffService.createStaff(submitData);
+        console.log('New staff member created:', newStaff);
+        
+        // Add new staff to the list
         setStaff(prevStaff => [...prevStaff, newStaff]);
         setSuccessMessage('Staff member created successfully!');
       }
-      
+
+      // Close form and reset
       setShowForm(false);
       setEditingStaff(null);
       resetForm();
+
     } catch (err) {
-      setError(err.message || 'Failed to save staff member');
-      console.error('Error saving staff:', err);
+      console.error('Error in handleSubmit:', err);
+      setError(err.message || 'An error occurred while saving staff member');
     } finally {
       setLoading(false);
     }
@@ -130,12 +152,15 @@ const StaffManagement = () => {
   };
 
   const handleEdit = (staffMember) => {
+    console.log('Editing staff member:', staffMember);
+    console.log('Staff member ID:', staffMember.id);
+    
     setEditingStaff(staffMember);
     setFormData({
       name: staffMember.name || '',
       email: staffMember.email || '',
       phone: staffMember.phone || '',
-      password: '',
+      password: '', // Don't populate password for security
       role: staffMember.role || 'staff',
       isActive: staffMember.isActive !== undefined ? staffMember.isActive : true
     });
@@ -148,7 +173,10 @@ const StaffManagement = () => {
       setError(null);
       try {
         await staffService.deleteStaff(id);
+        
+        // CRITICAL FIX: Remove from local state immediately
         setStaff(prevStaff => prevStaff.filter(s => s.id !== id));
+        
         setSuccessMessage('Staff member deleted successfully!');
       } catch (err) {
         setError(err.message || 'Failed to delete staff member');
@@ -159,17 +187,23 @@ const StaffManagement = () => {
     }
   };
 
-  const handleToggleStatus = async (id) => {
+  const handleToggleStatus = async (id, currentStatus) => {
     setLoading(true);
     setError(null);
     try {
-      await staffService.toggleStaffStatus(id, !staff.find(s => s.id === id)?.isActive);
-      setStaff(prevStaff => 
-        prevStaff.map(s => 
-          s.id === id ? { ...s, isActive: !s.isActive } : s
-        )
-      );
-      setSuccessMessage('Staff status updated successfully!');
+      const updatedStaff = await staffService.toggleStaffStatus(id, !currentStatus);
+      console.log('Status toggled, updated staff:', updatedStaff);
+      
+      // CRITICAL FIX: Update local state immediately
+ setStaff(prevStaff =>
+  prevStaff.map(s =>
+    (s._id || s.id) === id
+      ? { ...s, isActive: !currentStatus }
+      : s
+  )
+);
+      
+      setSuccessMessage(`Staff member ${!currentStatus ? 'activated' : 'deactivated'} successfully!`);
     } catch (err) {
       setError(err.message || 'Failed to update staff status');
       console.error('Error toggling status:', err);
@@ -178,10 +212,9 @@ const StaffManagement = () => {
     }
   };
 
-  // ✅ Helper function to safely get display name
+  // Helper function to safely get display name
   const getDisplayName = (staffMember) => {
     if (!staffMember) return 'Unknown';
-    // staffMember.name is guaranteed to exist because of normalization
     return staffMember.name || staffMember.email?.split('@')[0] || 'Unnamed Staff';
   };
 
@@ -315,7 +348,7 @@ const StaffManagement = () => {
                 <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <span className="text-sm text-gray-600">Status</span>
                   <button
-                    onClick={() => handleToggleStatus(staffMember.id)}
+                    onClick={() => handleToggleStatus(staffMember.id, staffMember.isActive)}
                     disabled={loading || staffMember.role === 'super_admin' || staffMember.id === user?.id}
                     className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
                       staffMember.isActive 
@@ -378,6 +411,7 @@ const StaffManagement = () => {
                   required
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                   placeholder="Enter full name"
+                  disabled={loading}
                 />
               </div>
 
@@ -392,6 +426,7 @@ const StaffManagement = () => {
                   required
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                   placeholder="Enter email"
+                  disabled={loading}
                 />
               </div>
 
@@ -405,6 +440,7 @@ const StaffManagement = () => {
                   onChange={(e) => setFormData({...formData, phone: e.target.value})}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                   placeholder="Enter phone number (optional)"
+                  disabled={loading}
                 />
               </div>
 
@@ -420,6 +456,7 @@ const StaffManagement = () => {
                   minLength="6"
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                   placeholder={editingStaff ? "Leave blank to keep current password" : "Enter password (min 6 characters)"}
+                  disabled={loading}
                 />
                 {editingStaff && (
                   <p className="text-xs text-gray-500 mt-1">
@@ -436,6 +473,7 @@ const StaffManagement = () => {
                   value={formData.role}
                   onChange={(e) => setFormData({...formData, role: e.target.value})}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                  disabled={loading}
                 >
                   <option value="staff">Staff</option>
                   <option value="super_admin">Super Admin</option>
@@ -452,6 +490,7 @@ const StaffManagement = () => {
                   checked={formData.isActive}
                   onChange={(e) => setFormData({...formData, isActive: e.target.checked})}
                   className="rounded"
+                  disabled={loading}
                 />
                 <label htmlFor="isActive" className="text-sm text-gray-700">
                   Active Account

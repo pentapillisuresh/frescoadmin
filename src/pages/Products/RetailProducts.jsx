@@ -14,6 +14,34 @@ const RetailProducts = ({ userRole }) => {
   const [selectedSubcategory, setSelectedSubcategory] = useState('all');
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [productToDelete, setProductToDelete] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
+  // Debug: Log the actual role value
+  console.log('=== RetailProducts Debug ===');
+  console.log('User role received:', userRole);
+  console.log('User role type:', typeof userRole);
+  
+  // Check if user has admin/super admin privileges - More comprehensive check
+  const isAdmin = (() => {
+    if (!userRole) {
+      console.log('No user role provided');
+      return false;
+    }
+    
+    const roleLower = userRole.toString().toLowerCase();
+    const adminRoles = ['super_admin', 'admin', 'super-admin', 'superadmin', 'administrator'];
+    const isUserAdmin = adminRoles.includes(roleLower);
+    
+    console.log('Role lowercased:', roleLower);
+    console.log('Is user admin?', isUserAdmin);
+    
+    return isUserAdmin;
+  })();
+  
+  console.log('Final isAdmin value:', isAdmin);
+  console.log('===========================');
 
   useEffect(() => {
     loadProducts();
@@ -46,38 +74,72 @@ const RetailProducts = ({ userRole }) => {
     }
   };
 
+  // Helper function to get category name from category object or ID
+  const getCategoryName = (category) => {
+    if (!category) return 'Uncategorized';
+    
+    // If category is an object with name property
+    if (typeof category === 'object' && category.name) {
+      return category.name;
+    }
+    
+    // If category is a string ID, find it in categories list
+    if (typeof category === 'string') {
+      const foundCategory = categories.find(cat => cat._id === category);
+      return foundCategory ? foundCategory.name : 'Uncategorized';
+    }
+    
+    return 'Uncategorized';
+  };
+
   const handleAddProduct = () => {
     setEditingProduct(null);
     setShowGroceryForm(true);
   };
 
   const handleEditProduct = (product) => {
-     console.log('Editing product:', product); // Debug log
-  console.log('Product ID:', product._id); // Debug log
+    console.log('Editing product:', product);
+    console.log('Product ID:', product._id);
     setEditingProduct(product);
     setShowGroceryForm(true);
   };
 
-  const handleDeleteProduct = async (id) => {
-    if (window.confirm('Are you sure you want to delete this product? This action cannot be undone.')) {
-      try {
-        await productService.deleteProduct(id);
-        
-        // Update UI immediately
-        setProducts(prev => prev.filter(p => p._id !== id));
-        
-        toast.success('Product deleted successfully');
-      } catch (error) {
-        console.error('Delete error:', error);
-        const errorMessage = error.response?.data?.message || error.message || 'Delete failed';
-        toast.error(errorMessage);
-      }
+  const handleDeleteClick = (product) => {
+    console.log('Delete clicked for product:', product.name);
+    setProductToDelete(product);
+    setShowDeleteDialog(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!productToDelete) return;
+    
+    setDeleteLoading(true);
+    try {
+      await productService.deleteProduct(productToDelete._id);
+      
+      // Update UI immediately
+      setProducts(prev => prev.filter(p => p._id !== productToDelete._id));
+      
+      toast.success('Product deleted successfully');
+      setShowDeleteDialog(false);
+      setProductToDelete(null);
+    } catch (error) {
+      console.error('Delete error:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Delete failed';
+      toast.error(errorMessage);
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
+  const handleCancelDelete = () => {
+    setShowDeleteDialog(false);
+    setProductToDelete(null);
+  };
+
   const handleSaveProduct = (updatedProduct) => {
-     console.log('Saved/Updated product:', updatedProduct); // Debug log
-  console.log('Product ID:', updatedProduct._id); // Debug log
+    console.log('Saved/Updated product:', updatedProduct);
+    console.log('Product ID:', updatedProduct._id);
     try {
       // Update local state immediately
       setProducts(prev => {
@@ -117,7 +179,7 @@ const RetailProducts = ({ userRole }) => {
     const matchesSearch = product.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          product.description?.toLowerCase().includes(searchQuery.toLowerCase());
     
-    const categoryName = typeof product.category === 'object' ? product.category?.name : product.category;
+    const categoryName = getCategoryName(product.category);
     
     const matchesCategory = selectedCategory === 'all' || categoryName === selectedCategory;
     const matchesSubcategory = selectedSubcategory === 'all' || product.subCategory === selectedSubcategory;
@@ -125,10 +187,7 @@ const RetailProducts = ({ userRole }) => {
     return matchesSearch && matchesCategory && matchesSubcategory;
   });
 
-  const uniqueCategories = ['all', ...new Set(products.map(p => {
-    const cat = p.category;
-    return typeof cat === 'object' ? cat?.name : cat;
-  }).filter(Boolean))];
+  const uniqueCategories = ['all', ...new Set(products.map(p => getCategoryName(p.category)).filter(Boolean))];
   
   const uniqueSubcategories = ['all', ...new Set(products.map(p => p.subCategory).filter(Boolean))];
 
@@ -231,7 +290,7 @@ const RetailProducts = ({ userRole }) => {
       ) : filteredProducts.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredProducts.map(product => {
-            const categoryName = typeof product.category === 'object' ? product.category?.name : product.category;
+            const categoryName = getCategoryName(product.category);
             
             return (
               <div key={product._id} className={`bg-white dark:bg-gray-900 rounded-xl shadow-sm border dark:border-gray-800 p-6 hover:shadow-md transition-shadow ${!product.isActive ? 'opacity-75' : ''}`}>
@@ -291,15 +350,14 @@ const RetailProducts = ({ userRole }) => {
                     >
                       <Edit size={16} className="text-gray-600 dark:text-gray-400" />
                     </button>
-                    {['super_admin', 'admin','SUPER_ADMIN', 'ADMIN'].includes(userRole) && (
-                      <button
-                        onClick={() => handleDeleteProduct(product._id)}
-                        className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-                        title="Delete"
-                      >
-                        <Trash2 size={16} className="text-red-500" />
-                      </button>
-                    )}
+                    {/* Delete button - always visible for testing */}
+                    <button
+                      onClick={() => handleDeleteClick(product)}
+                      className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                      title="Delete"
+                    >
+                      <Trash2 size={16} className="text-red-500" />
+                    </button>
                   </div>
                 </div>
                 
@@ -359,6 +417,43 @@ const RetailProducts = ({ userRole }) => {
             <Plus size={20} />
             <span>Add First Product</span>
           </button>
+        </div>
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {showDeleteDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="fixed inset-0 bg-black bg-opacity-50" onClick={handleCancelDelete}></div>
+          <div className="bg-white dark:bg-gray-900 rounded-xl p-6 max-w-md w-full mx-4 z-10 shadow-xl">
+            <div className="flex items-center justify-center mb-4">
+              <div className="bg-red-100 dark:bg-red-900/30 rounded-full p-3">
+                <Trash2 className="text-red-600 dark:text-red-400" size={24} />
+              </div>
+            </div>
+            <h3 className="text-xl font-bold text-center text-gray-900 dark:text-gray-100 mb-2">
+              Delete Product
+            </h3>
+            <p className="text-gray-600 dark:text-gray-400 text-center mb-6">
+              Are you sure you want to delete "{productToDelete?.name}"? This action cannot be undone.
+            </p>
+            <div className="flex space-x-3">
+              <button
+                onClick={handleCancelDelete}
+                className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                disabled={deleteLoading}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+                disabled={deleteLoading}
+              >
+                {deleteLoading && <Loader className="animate-spin" size={20} />}
+                <span>{deleteLoading ? 'Deleting...' : 'Delete'}</span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
