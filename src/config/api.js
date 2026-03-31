@@ -40,6 +40,7 @@ export const API_ENDPOINTS = {
     DELETE: (id) => `/v1/menu-items/${id}`,
     TOGGLE_STATUS: (id) => `/v1/menu-items/${id}/status`,
   },
+   LOCATIONS: '/v1/kovera-locations',
   SETTINGS: '/settings',
 };
 

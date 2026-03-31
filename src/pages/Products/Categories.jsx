@@ -6,14 +6,12 @@ import API_BASE_URL from '../../config/api';
 
 const Categories = () => {
   const [groceryCategories, setGroceryCategories] = useState([]);
-  const [cookedFoodCategories, setCookedFoodCategories] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
-    categoryType: 'groceries',
     subCategories: [],
     image: null,
     imagePreview: null
@@ -32,12 +30,10 @@ const Categories = () => {
       // Fetch all categories
       const allCategories = await categoryService.getAllCategories();
       
-      // Separate categories by type
+      // Filter only grocery categories
       const groceries = allCategories.filter(cat => cat.categoryType === 'groceries');
-      const cookedFood = allCategories.filter(cat => cat.categoryType === 'kovera');
       
       setGroceryCategories(groceries);
-      setCookedFoodCategories(cookedFood);
     } catch (error) {
       console.error('Error loading categories:', error);
       alert('Failed to load categories. Please try again.');
@@ -83,7 +79,7 @@ const Categories = () => {
       // Prepare FormData for API
       const submitData = new FormData();
       submitData.append('name', formData.name);
-      submitData.append('categoryType', formData.categoryType);
+      submitData.append('categoryType', 'groceries'); // Always set as groceries
       
       // Add subcategories if any
       if (formData.subCategories && formData.subCategories.length > 0) {
@@ -119,7 +115,6 @@ const Categories = () => {
       setSelectedCategory(null);
       setFormData({
         name: '',
-        categoryType: 'groceries',
         subCategories: [],
         image: null,
         imagePreview: null
@@ -138,7 +133,6 @@ const Categories = () => {
     setSelectedCategory(category);
     setFormData({
       name: category.name,
-      categoryType: category.categoryType,
       subCategories: category.subCategories || [],
       image: null,
       imagePreview: category.imageUrl || null
@@ -214,112 +208,119 @@ const Categories = () => {
     return `${API_BASE_URL}/${imagePath}`;
   };
 
-  const CategoryCard = ({ category, type }) => {
+  const CategoryCard = ({ category }) => {
     const imageUrl = category.imageUrl || getFullImageUrl(category.image);
+    const isExpanded = expandedCategories[category._id];
     
     return (
-      <div className="border rounded-lg p-4 hover:shadow-md transition-shadow">
-        <div className="flex items-start justify-between">
-          <div className="flex items-start space-x-3 flex-1">
-            <button
-              onClick={() => toggleCategory(category._id)}
-              className="p-1 hover:bg-gray-100 rounded mt-1"
-            >
-              {expandedCategories[category._id] ? (
-                <ChevronDown size={16} className="text-gray-500" />
-              ) : (
-                <ChevronRight size={16} className="text-gray-500" />
-              )}
-            </button>
-            
+      <div className="bg-white border rounded-xl hover:shadow-lg transition-all duration-200 overflow-hidden">
+        {/* Category Header with Image */}
+        <div className="p-4">
+          <div className="flex flex-col items-center text-center">
             {/* Category Image */}
-            {imageUrl ? (
-              <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
-                <img 
-                  src={imageUrl} 
-                  alt={category.name}
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    e.target.onerror = null;
-                    e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"%3E%3Crect x="3" y="3" width="18" height="18" rx="2" ry="2"%3E%3C/rect%3E%3Ccircle cx="8.5" cy="8.5" r="1.5"%3E%3C/circle%3E%3Cpolyline points="21 15 16 10 5 21"%3E%3C/polyline%3E%3C/svg%3E';
-                  }}
-                />
-              </div>
-            ) : (
-              <div className="w-12 h-12 rounded-lg flex-shrink-0 bg-gray-100 flex items-center justify-center">
-                <ImageIcon size={20} className="text-gray-400" />
-              </div>
-            )}
-            
-            <div className="flex-1">
-              <div className="flex items-center space-x-2">
-                <h4 className="font-medium text-gray-900">{category.name}</h4>
-                {type === 'kovera' && (
-                  <span className="text-xs px-2 py-0.5 bg-yellow-100 text-yellow-800 rounded-full">
-                    KOVERA
-                  </span>
-                )}
-              </div>
-              {category.description && (
-                <p className="text-sm text-gray-500 mt-1">{category.description}</p>
+            <div className="mb-3">
+              {imageUrl ? (
+                <div className="w-24 h-24 rounded-full overflow-hidden bg-gray-100 border-2 border-gray-200">
+                  <img 
+                    src={imageUrl} 
+                    alt={category.name}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.target.onerror = null;
+                      e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"%3E%3Crect x="3" y="3" width="18" height="18" rx="2" ry="2"%3E%3C/rect%3E%3Ccircle cx="8.5" cy="8.5" r="1.5"%3E%3C/circle%3E%3Cpolyline points="21 15 16 10 5 21"%3E%3C/polyline%3E%3C/svg%3E';
+                    }}
+                  />
+                </div>
+              ) : (
+                <div className="w-24 h-24 rounded-full bg-gradient-to-r from-blue-100 to-indigo-100 flex items-center justify-center border-2 border-gray-200">
+                  <ImageIcon size={32} className="text-blue-500" />
+                </div>
               )}
             </div>
-          </div>
-          
-          <div className="flex space-x-1">
+            
+            {/* Category Name */}
+            <h4 className="font-semibold text-gray-900 text-lg mb-1">{category.name}</h4>
+            
+            {/* Category Type Badge */}
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 mb-3">
+              Groceries
+            </span>
+            
+            {/* Expand/Collapse Button */}
             <button
-              onClick={() => handleEdit(category)}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              title="Edit category"
+              onClick={() => toggleCategory(category._id)}
+              className="text-blue-600 hover:text-blue-700 text-sm flex items-center space-x-1"
             >
-              <Edit size={16} className="text-blue-600" />
-            </button>
-            <button
-              onClick={() => handleDelete(category)}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              title="Delete category"
-            >
-              <Trash2 size={16} className="text-red-600" />
+              {isExpanded ? (
+                <>
+                  <ChevronDown size={14} />
+                  <span>Hide Subcategories</span>
+                </>
+              ) : (
+                <>
+                  <ChevronRight size={14} />
+                  <span>View Subcategories</span>
+                </>
+              )}
             </button>
           </div>
         </div>
 
-        {expandedCategories[category._id] && (
-          <div className="mt-4 pl-12 space-y-2">
-            <div className="flex items-center justify-between">
+        {/* Subcategories Section */}
+        {isExpanded && (
+          <div className="border-t bg-gray-50 p-4">
+            <div className="flex items-center justify-between mb-3">
               <span className="text-sm font-medium text-gray-700">Subcategories:</span>
               <button
                 onClick={() => handleAddSubcategory(category)}
-                className="text-sm text-blue-600 hover:text-blue-700 flex items-center space-x-1"
+                className="text-xs text-blue-600 hover:text-blue-700 flex items-center space-x-1"
               >
-                <Plus size={14} />
-                <span>Add Subcategory</span>
+                <Plus size={12} />
+                <span>Add</span>
               </button>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
               {category.subCategories && category.subCategories.length > 0 ? (
                 category.subCategories.map((subcat, index) => (
-                  <div key={index} className="flex items-center space-x-1 px-3 py-1.5 bg-gray-100 rounded-full">
-                    <span className="text-sm text-gray-700">{subcat}</span>
+                  <div key={index} className="flex items-center space-x-1 px-2 py-1 bg-white rounded-full border">
+                    <span className="text-xs text-gray-700">{subcat}</span>
                     <button
                       onClick={() => handleRemoveSubcategory(category, subcat)}
-                      className="text-red-500 hover:text-red-700 ml-1"
+                      className="text-red-500 hover:text-red-700"
                     >
                       ×
                     </button>
                   </div>
                 ))
               ) : (
-                <span className="text-sm text-gray-400">No subcategories</span>
+                <span className="text-xs text-gray-400">No subcategories</span>
               )}
             </div>
           </div>
         )}
+
+        {/* Action Buttons */}
+        <div className="border-t p-3 flex justify-center space-x-2">
+          <button
+            onClick={() => handleEdit(category)}
+            className="px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center space-x-1"
+          >
+            <Edit size={14} />
+            <span>Edit</span>
+          </button>
+          <button
+            onClick={() => handleDelete(category)}
+            className="px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center space-x-1"
+          >
+            <Trash2 size={14} />
+            <span>Delete</span>
+          </button>
+        </div>
       </div>
     );
   };
 
-  if (loading && groceryCategories.length === 0 && cookedFoodCategories.length === 0) {
+  if (loading && groceryCategories.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
@@ -332,14 +333,13 @@ const Categories = () => {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Categories</h1>
-          <p className="text-gray-600">Manage product categories and subcategories</p>
+          <p className="text-gray-600">Manage grocery product categories and subcategories</p>
         </div>
         <button
           onClick={() => {
             setSelectedCategory(null);
             setFormData({
               name: '',
-              categoryType: 'groceries',
               subCategories: [],
               image: null,
               imagePreview: null
@@ -353,66 +353,19 @@ const Categories = () => {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Grocery Categories */}
-        <div className="bg-white rounded-xl shadow-sm border p-6">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center space-x-3">
-              <div className="p-3 bg-gradient-to-r from-blue-50 to-blue-100 rounded-xl">
-                <Tag className="text-blue-600" size={24} />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">Grocery Categories</h3>
-                <p className="text-sm text-gray-600">Manage retail grocery categories</p>
-              </div>
-            </div>
-            <span className="px-3 py-1 bg-blue-100 text-blue-800 text-sm rounded-full">
-              {groceryCategories.length} categories
-            </span>
+      {/* Categories Grid - 4 columns */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        {groceryCategories.length > 0 ? (
+          groceryCategories.map(category => (
+            <CategoryCard key={category._id} category={category} />
+          ))
+        ) : (
+          <div className="col-span-full text-center py-12 bg-white rounded-xl border">
+            <Tag size={48} className="text-gray-400 mx-auto mb-4" />
+            <p className="text-gray-500">No grocery categories found.</p>
+            <p className="text-sm text-gray-400 mt-1">Click "Add Category" to create one.</p>
           </div>
-
-          <div className="space-y-4 max-h-[600px] overflow-y-auto">
-            {groceryCategories.length > 0 ? (
-              groceryCategories.map(category => (
-                <CategoryCard key={category._id} category={category} type="groceries" />
-              ))
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                No grocery categories found. Click "Add Category" to create one.
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* KOVERA Food Categories */}
-        <div className="bg-white rounded-xl shadow-sm border p-6">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center space-x-3">
-              <div className="p-3 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl">
-                <Tag className="text-purple-600" size={24} />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">KOVERA Food Categories</h3>
-                <p className="text-sm text-gray-600">Managed under fixed brand "KOVERA"</p>
-              </div>
-            </div>
-            <span className="px-3 py-1 bg-purple-100 text-purple-800 text-sm rounded-full">
-              {cookedFoodCategories.length} categories
-            </span>
-          </div>
-
-          <div className="space-y-4 max-h-[600px] overflow-y-auto">
-            {cookedFoodCategories.length > 0 ? (
-              cookedFoodCategories.map(category => (
-                <CategoryCard key={category._id} category={category} type="kovera" />
-              ))
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                No KOVERA food categories found. Click "Add Category" to create one.
-              </div>
-            )}
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Category Form Modal */}
@@ -425,7 +378,7 @@ const Categories = () => {
                   {selectedCategory ? 'Edit Category' : 'Add New Category'}
                 </h2>
                 <p className="text-sm text-gray-600 mt-1">
-                  {formData.categoryType === 'groceries' ? 'Grocery Category' : 'KOVERA Food Category'}
+                  Grocery Category
                 </p>
               </div>
               <button 
@@ -444,20 +397,23 @@ const Categories = () => {
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 space-y-6">
-              {/* Category Type */}
+              {/* Category Type - Disabled, always Groceries */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Category Type *
+                  Category Type
                 </label>
-                <select
-                  value={formData.categoryType}
-                  onChange={(e) => setFormData({...formData, categoryType: e.target.value})}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  required
-                >
-                  <option value="groceries">Groceries</option>
-                  <option value="kovera">KOVERA Food</option>
-                </select>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value="Groceries"
+                    disabled
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500 cursor-not-allowed"
+                  />
+                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                    <Tag size={16} className="text-gray-400" />
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Category type is fixed as Groceries</p>
               </div>
 
               {/* Category Name */}
@@ -568,14 +524,6 @@ const Categories = () => {
                   )}
                 </div>
               </div>
-
-              {formData.categoryType === 'kovera' && (
-                <div className="p-4 bg-yellow-50 rounded-lg">
-                  <p className="text-sm text-yellow-800">
-                    This category will be automatically assigned to the "KOVERA" brand.
-                  </p>
-                </div>
-              )}
 
               <div className="flex justify-end space-x-3 pt-4 border-t">
                 <button
